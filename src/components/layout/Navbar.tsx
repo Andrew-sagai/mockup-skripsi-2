@@ -14,6 +14,20 @@ export default function Navbar() {
   const notifRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
 
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setShowNotif(false);
+      }
+      if (userRef.current && !userRef.current.contains(e.target as Node)) {
+        setShowUser(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
   const user = state.currentUser;
   if (!user) return null;
 
@@ -47,20 +61,6 @@ export default function Navbar() {
     logout();
     router.push('/login');
   };
-
-  // Close dropdowns on outside click
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
-        setShowNotif(false);
-      }
-      if (userRef.current && !userRef.current.contains(e.target as Node)) {
-        setShowUser(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
 
   return (
     <header className="navbar">

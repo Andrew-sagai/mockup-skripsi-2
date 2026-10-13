@@ -11,32 +11,30 @@ export default function KepalaBidangDashboard() {
   const user = state.currentUser;
   const now = new Date();
 
-  if (!user) return null;
-
   const myDisposisi = getScopedDisposisi();
-  const unitKerja = state.unitKerja.find(u => u.id === user.unitKerjaId);
+  const unitKerja = state.unitKerja.find(u => u.id === user?.unitKerjaId);
 
   const menungguParafTerima = useMemo(() =>
     myDisposisi.filter(d =>
-      d.bidangTujuan.find(b => b.unitKerjaId === user.unitKerjaId)?.statusTerima === 'belum'
+      d.bidangTujuan.find(b => b.unitKerjaId === user?.unitKerjaId)?.statusTerima === 'belum'
     ).length,
-    [myDisposisi]
+    [myDisposisi, user?.unitKerjaId]
   );
 
   const sedangProses = useMemo(() =>
     myDisposisi.filter(d =>
       d.status !== 'selesai' &&
-      d.bidangTujuan.find(b => b.unitKerjaId === user.unitKerjaId)?.statusTerima === 'diterima'
+      d.bidangTujuan.find(b => b.unitKerjaId === user?.unitKerjaId)?.statusTerima === 'diterima'
     ).length,
-    [myDisposisi]
+    [myDisposisi, user?.unitKerjaId]
   );
 
   const menungguPeriksa = useMemo(() =>
     myDisposisi.filter(d => {
-      const statPerBidang = d.statusPerBidang?.[user.unitKerjaId || ''];
+      const statPerBidang = d.statusPerBidang?.[user?.unitKerjaId || ''];
       return statPerBidang?.status === 'menunggu_pemeriksaan';
     }).length,
-    [myDisposisi]
+    [myDisposisi, user?.unitKerjaId]
   );
 
   const terlambat = useMemo(() =>
@@ -46,6 +44,8 @@ export default function KepalaBidangDashboard() {
     }).length,
     [myDisposisi]
   );
+
+  if (!user) return null;
 
   const myStaf = state.users.filter(u => u.role === 'staf_pelaksana' && u.unitKerjaId === user.unitKerjaId);
   const stafBeban = myStaf.map(s => {
