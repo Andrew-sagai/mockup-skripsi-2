@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-08T10:17:00Z",
+  "title": "Design System: Surat Dinas Minahasa Selatan",
+  "extensions": {
+    "colorMeta": {
+      "forest-green": { "role": "primary", "displayName": "Forest Green", "canonical": "#2A7356", "tonalRamp": ["#0B1F17", "#123226", "#194635", "#215D45", "#2A7356", "#55977B", "#9DC4B3", "#E6EFEA"] },
+      "harvest-gold": { "role": "secondary", "displayName": "Harvest Gold", "canonical": "#E6B044", "tonalRamp": ["#895804", "#A06D12", "#B78322", "#CF9932", "#E6B044", "#E3C575", "#EFDFB2", "#FCF7ED"] },
+      "earthy-canvas": { "role": "neutral", "displayName": "Earthy Canvas", "canonical": "#F7F7F4", "tonalRamp": ["#242E2A", "#2E3A36", "#44544F", "#62756F", "#889A95", "#B6C2BE", "#E1E6E4", "#F7F7F4"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Page headers and major sections." },
+      "body": { "displayName": "Body", "purpose": "Main content, paragraphs, and descriptions." },
+      "print-body": { "displayName": "Print Body", "purpose": "Matches the official physical A4 layout constraints exactly." },
+      "print-mono": { "displayName": "Print Mono", "purpose": "Used for strict archival stamps and reference codes within the paper layout." }
+    },
+    "shadows": [
+      { "name": "shadow-md", "value": "0 4px 12px rgba(36, 46, 42, 0.03)", "purpose": "Slight lift for hover states on stat cards." },
+      { "name": "shadow-glass", "value": "0 8px 32px rgba(0, 0, 0, 0.05)", "purpose": "Reserved for modals, dropdowns, and floating elements." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Used for main actions.",
+      "html": "<button class=\"ds-btn-primary\">SIMPAN DATA</button>",
+      "css": ".ds-btn-primary { background: var(--colors-forest-green, #2A7356); color: #fff; padding: 10px 20px; border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500; border: none; cursor: pointer; transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-primary:hover { background: var(--colors-forest-green-dark, #215D45); } .ds-btn-primary:active { transform: scale(0.97); }"
+    },
+    {
+      "name": "Form Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Standard text input field.",
+      "html": "<input type=\"text\" class=\"ds-input\" placeholder=\"Nomor Surat...\" />",
+      "css": ".ds-input { width: 100%; padding: 10px 14px; border: 1.5px solid var(--colors-neutral-border, #E1E6E4); border-radius: 8px; font-family: 'DM Sans', sans-serif; font-size: 14px; color: var(--colors-earthy-ink, #242E2A); background: #fff; transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1); outline: none; } .ds-input:focus { border-color: var(--colors-earthy-ink, #242E2A); }"
+    },
+    {
+      "name": "Stat Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Used to display summary metrics.",
+      "html": "<div class=\"ds-stat-card\"><div class=\"ds-stat-icon ds-success\">+</div><div class=\"ds-stat-content\"><div class=\"ds-stat-label\">Surat Masuk</div><div class=\"ds-stat-value\">142</div></div></div>",
+      "css": ".ds-stat-card { background: #ffffff; border-radius: 12px; padding: 24px; border: 1px solid var(--colors-neutral-border, #E1E6E4); display: flex; align-items: flex-start; gap: 16px; transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1); font-family: 'DM Sans', sans-serif; } .ds-stat-card:hover { border-color: var(--colors-neutral-border-dark, #CED6D3); box-shadow: 0 4px 12px rgba(36, 46, 42, 0.03); } .ds-stat-icon { width: 48px; height: 48px; border-radius: 8px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 700; font-size: 24px; } .ds-stat-icon.ds-success { background: #E6EFEA; color: #2A7356; } .ds-stat-content { flex: 1; } .ds-stat-label { font-family: 'Bricolage Grotesque', sans-serif; font-size: 13px; font-weight: 600; color: #44544F; margin-bottom: 8px; } .ds-stat-value { font-family: 'Bricolage Grotesque', sans-serif; font-size: 32px; font-weight: 700; color: #242E2A; line-height: 1; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Modern Bureaucrat",
+    "overview": "Calm, authoritative, and highly structured. A digital extension of official paperwork without the clutter. It is efficient, clear, and respects the hierarchy of government workflows. The system translates physical disposition sheets into a precise digital format, replacing ambiguity with strict tracking and grounded aesthetics.",
+    "keyCharacteristics": [
+      "Uncompromising clarity and hierarchy.",
+      "Grounded, official color palette (Forest Green and Harvest Gold).",
+      "Flat-by-default surfaces with structural borders.",
+      "Tactile and confident interactive elements."
+    ],
+    "rules": [
+      {
+        "name": "The One Voice Rule",
+        "body": "The primary green is reserved for primary actions, active navigation states, and key highlights. It should not be overused as a background.",
+        "section": "colors"
+      },
+      {
+        "name": "The Bureaucratic Legibility Rule",
+        "body": "Data tables and form labels must use the label weight (600) to ensure scanability, while input data remains regular weight (400) to distinguish structure from content.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-By-Default Rule",
+        "body": "Surfaces are flat at rest, defined by a 1px border. Shadows appear only as a response to state (hover, elevation, focus) for a minimalist/editorial feel.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do use the strict border system to separate content regions.",
+      "Do reserve Harvest Gold for items requiring attention or warnings."
+    ],
+    "donts": [
+      "Don't use pure black (#000000) for text; stick to Earthy Ink.",
+      "Don't apply ambient drop shadows to cards at rest."
+    ]
+  }
+}
