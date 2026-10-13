@@ -24,29 +24,26 @@ export default function TindakLanjutPage() {
 
   const user = state.currentUser;
 
-  // Access Control
-  if (user?.role !== 'kepala_bidang') {
-    return (
-      <DashboardLayout>
-        <div className="empty-state">
-          <Shield size={48} style={{ color: 'var(--danger)', marginBottom: 12 }} />
-          <h3>Akses Ditolak</h3>
-          <p>Halaman ini khusus untuk Kepala Bidang.</p>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
   const now = new Date();
 
   // Data
   const filteredData = useMemo(() => {
+    if (!user || user.role !== 'kepala_bidang') return [];
+
     // 1. Cari disposisi tujuan bidang ini
     const myDisposisi = state.disposisi.filter(d => 
       d.bidangTujuan.some(b => b.unitKerjaId === user.unitKerjaId)
     );
 
-    let items = myDisposisi.map(d => {
+    type ItemType = {
+      d: typeof state.disposisi[0];
+      sm: typeof state.suratMasuk[0] | undefined;
+      myBidang: typeof state.disposisi[0]['bidangTujuan'][0] | undefined;
+      derivedStatus: string;
+      pelaksana: string;
+    };
+
+    let items: ItemType[] = myDisposisi.map(d => {
       const sm = state.suratMasuk.find(s => s.id === d.suratMasukId);
       const myBidang = d.bidangTujuan.find(b => b.unitKerjaId === user.unitKerjaId);
       
@@ -116,8 +113,20 @@ export default function TindakLanjutPage() {
     });
 
     return items;
-  }, [state.disposisi, state.suratMasuk, state.penugasan, state.tindakLanjut, user.unitKerjaId, user.nama, search, activeTab, getUser]);
+  }, [state.disposisi, state.suratMasuk, state.penugasan, state.tindakLanjut, user?.unitKerjaId, user?.nama, search, activeTab, getUser]);
 
+  // Access Control
+  if (user?.role !== 'kepala_bidang') {
+    return (
+      <DashboardLayout>
+        <div className="empty-state">
+          <Shield size={48} style={{ color: 'var(--danger)', marginBottom: 12 }} />
+          <h3>Akses Ditolak</h3>
+          <p>Halaman ini khusus untuk Kepala Bidang.</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>

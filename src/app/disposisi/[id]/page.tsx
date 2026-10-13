@@ -239,6 +239,13 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
         .sort((a, b) => new Date(b.waktu).getTime() - new Date(a.waktu).getTime())
     : [];
 
+  // ─── Efek: inisialisasi sifat ───
+  useEffect(() => {
+    if (dataSurat.sifat && !selectedSifat) {
+      setSelectedSifat(dataSurat.sifat);
+    }
+  }, [dataSurat.sifat, selectedSifat]);
+
   // ─── Akses ───────────────────────────────────────────────────────────────
   // Admin tidak boleh lihat kartu
   if (user?.role === 'admin') {
@@ -345,13 +352,6 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
   const selesaiTujuan = Object.values(disposisi.statusPerBidang || {})
     .filter(s => s.status === 'ditindak_langsung').length;
   const sebagianSelesai = totalTujuan > 1 && selesaiTujuan > 0 && selesaiTujuan < totalTujuan;
-
-  // ─── Efek: inisialisasi sifat ───
-  useEffect(() => {
-    if (dataSurat.sifat && !selectedSifat) {
-      setSelectedSifat(dataSurat.sifat);
-    }
-  }, [dataSurat.sifat, selectedSifat]);
 
   // Toggle instruksi (multi-select)
   const toggleInstruksi = (jenis: JenisInstruksi) => {

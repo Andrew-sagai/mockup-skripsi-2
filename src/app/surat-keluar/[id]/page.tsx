@@ -88,6 +88,25 @@ export default function SuratKeluarDetailPage({ params }: { params: Promise<{ id
   const [showModalTtd, setModalTtd]         = useState(false);
   const [isBusy, setIsBusy]                 = useState(false);
 
+  // ── Handler PDF ─────────────────────────────────────────────
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] ?? null;
+    setPdfError('');
+    if (!f) return;
+    if (f.type !== 'application/pdf' && !f.name.endsWith('.pdf')) {
+      setPdfError('Berkas harus berformat PDF.');
+      e.target.value = '';
+      return;
+    }
+    if (f.size > 10 * 1024 * 1024) {
+      setPdfError('Ukuran berkas melebihi 10 MB.');
+      e.target.value = '';
+      return;
+    }
+    setFileFinal(f);
+    setPdfUrl(URL.createObjectURL(f));
+  }, []);
+
   if (!surat) {
     return (
       <DashboardLayout>
@@ -117,25 +136,6 @@ export default function SuratKeluarDetailPage({ params }: { params: Promise<{ id
 
   // Berkas final wajib sebelum Tandai Terkirim
   const kirimLengkap = !!fileFinal && !pdfError && tanggalKirim !== '';
-
-  // ── Handler PDF ─────────────────────────────────────────────
-  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0] ?? null;
-    setPdfError('');
-    if (!f) return;
-    if (f.type !== 'application/pdf' && !f.name.endsWith('.pdf')) {
-      setPdfError('Berkas harus berformat PDF.');
-      e.target.value = '';
-      return;
-    }
-    if (f.size > 10 * 1024 * 1024) {
-      setPdfError('Ukuran berkas melebihi 10 MB.');
-      e.target.value = '';
-      return;
-    }
-    setFileFinal(f);
-    setPdfUrl(URL.createObjectURL(f));
-  }, []);
 
   const hapusPdf = () => { setFileFinal(null); setPdfUrl(null); setPdfError(''); if (fileInputRef.current) fileInputRef.current.value = ''; };
 

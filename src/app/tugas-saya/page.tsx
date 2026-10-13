@@ -25,39 +25,24 @@ export default function TugasSayaPage() {
 
   const user = state.currentUser;
 
-  // Access Control
-  if (user?.role !== 'staf_pelaksana') {
-    return (
-      <DashboardLayout>
-        <div className="empty-state">
-          <Shield size={48} style={{ color: 'var(--danger)', marginBottom: 12 }} />
-          <h3>Akses Ditolak</h3>
-          <p>Halaman ini khusus untuk Staf Pelaksana.</p>
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  // Data
-  const myPenugasan = state.penugasan.filter(p => p.stafId === user.id);
   const now = new Date();
 
+  const myPenugasan = useMemo(() => {
+    if (!user || user.role !== 'staf_pelaksana') return [];
+    return state.penugasan.filter(p => p.stafId === user.id);
+  }, [state.penugasan, user]);
+
   const filteredData = useMemo(() => {
+    if (!user || user.role !== 'staf_pelaksana') return [];
+
     let result = myPenugasan.filter(p => 
       ['diteruskan_staf', 'dikerjakan', 'dikembalikan', 'selesai'].includes(p.status) || 
-      // Mapping ke status penugasan:
-      // diteruskan_staf -> ditugaskan
-      // sedang_dikerjakan -> dikerjakan
-      // perlu_perbaikan -> dikembalikan
-      // menunggu_pemeriksaan -> dikerjakan (tapi di state disposisi)
       p.status
     );
 
     // Map internal status for filtering
     const mappedPenugasan = myPenugasan.map(p => {
       const d = state.disposisi.find(disp => disp.id === p.disposisiId);
-      // Wait, let's use exact statuses from prompt:
-      // Status in prompt: Diteruskan ke Staf, Sedang Dikerjakan, Menunggu Pemeriksaan, Perlu Perbaikan, Selesai.
       let derivedStatus = 'diteruskan_staf';
       if (p.status === 'ditugaskan') derivedStatus = 'diteruskan_staf';
       else if (p.status === 'dikerjakan') derivedStatus = 'sedang_dikerjakan';
@@ -75,7 +60,20 @@ export default function TugasSayaPage() {
       return mappedPenugasan.filter(p => p.derivedStatus === filterStatus);
     }
     return mappedPenugasan;
-  }, [myPenugasan, filterStatus, state.disposisi, state.tindakLanjut]);
+  }, [myPenugasan, filterStatus, state.disposisi, state.tindakLanjut, user]);
+
+  // Access Control
+  if (user?.role !== 'staf_pelaksana') {
+    return (
+      <DashboardLayout>
+        <div className="empty-state">
+          <Shield size={48} style={{ color: 'var(--danger)', marginBottom: 12 }} />
+          <h3>Akses Ditolak</h3>
+          <p>Halaman ini khusus untuk Staf Pelaksana.</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   // render
   return (
