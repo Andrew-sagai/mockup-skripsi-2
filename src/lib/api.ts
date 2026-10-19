@@ -29,22 +29,70 @@ export function useBusinessLogic() {
     nomorSurat: string,
     klasifikasiId: string,
     tahun: number,
-    jenisSuratId?: string
+    jenisSuratId?: string,
+    extra?: {
+      statusArsip?: 'disposisi' | 'selesai' | 'terkirim';
+      laporanHasil?: string;
+      berkasLaporanUrl?: string;
+      tanggalSelesai?: string;
+      suratBalasanId?: string;
+      suratBalasanNomor?: string;
+      suratBalasanPerihal?: string;
+      isSuratBalasan?: boolean;
+    }
   ) => {
-    dispatch({ type: 'ADD_ARSIP' as any, payload: {
-      id: generateId('a'),
-      suratMasukId: jenisSurat === 'masuk' ? suratId : undefined,
-      suratKeluarId: jenisSurat === 'keluar' ? suratId : undefined,
-      jenisSurat,
-      jenisSuratId,
-      kodeArsip,
-      berkasUrl,
-      perihal,
-      nomorSurat,
-      tahun,
-      klasifikasiId,
-      createdAt: new Date().toISOString()
-    }});
+    const existing = state.arsip?.find(a =>
+      jenisSurat === 'masuk' ? a.suratMasukId === suratId : a.suratKeluarId === suratId
+    );
+
+    if (existing) {
+      dispatch({
+        type: 'UPDATE_ARSIP',
+        payload: {
+          id: existing.id,
+          ...(kodeArsip ? { kodeArsip } : {}),
+          ...(berkasUrl ? { berkasUrl } : {}),
+          ...(perihal ? { perihal } : {}),
+          ...(nomorSurat && nomorSurat !== '-' ? { nomorSurat } : {}),
+          ...(klasifikasiId ? { klasifikasiId } : {}),
+          ...(jenisSuratId ? { jenisSuratId } : {}),
+          ...(extra?.statusArsip ? { statusArsip: extra.statusArsip } : {}),
+          ...(extra?.laporanHasil ? { laporanHasil: extra.laporanHasil } : {}),
+          ...(extra?.berkasLaporanUrl ? { berkasLaporanUrl: extra.berkasLaporanUrl } : {}),
+          ...(extra?.tanggalSelesai ? { tanggalSelesai: extra.tanggalSelesai } : {}),
+          ...(extra?.suratBalasanId ? { suratBalasanId: extra.suratBalasanId } : {}),
+          ...(extra?.suratBalasanNomor ? { suratBalasanNomor: extra.suratBalasanNomor } : {}),
+          ...(extra?.suratBalasanPerihal ? { suratBalasanPerihal: extra.suratBalasanPerihal } : {}),
+          ...(extra?.isSuratBalasan !== undefined ? { isSuratBalasan: extra.isSuratBalasan } : {}),
+        }
+      });
+    } else {
+      dispatch({
+        type: 'ADD_ARSIP',
+        payload: {
+          id: generateId('a'),
+          suratMasukId: jenisSurat === 'masuk' ? suratId : undefined,
+          suratKeluarId: jenisSurat === 'keluar' ? suratId : undefined,
+          jenisSurat,
+          jenisSuratId,
+          kodeArsip,
+          berkasUrl,
+          perihal,
+          nomorSurat,
+          tahun,
+          klasifikasiId,
+          createdAt: new Date().toISOString(),
+          statusArsip: extra?.statusArsip || (jenisSurat === 'keluar' ? 'terkirim' : 'selesai'),
+          laporanHasil: extra?.laporanHasil,
+          berkasLaporanUrl: extra?.berkasLaporanUrl,
+          tanggalSelesai: extra?.tanggalSelesai,
+          suratBalasanId: extra?.suratBalasanId,
+          suratBalasanNomor: extra?.suratBalasanNomor,
+          suratBalasanPerihal: extra?.suratBalasanPerihal,
+          isSuratBalasan: extra?.isSuratBalasan,
+        }
+      });
+    }
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -186,6 +234,22 @@ export function useBusinessLogic() {
         tautanUrl: `/disposisi/${dispId}`, dibaca: false, createdAt: today.toISOString()
       }});
     }
+
+    // f. Otomatis arsipkan surat masuk begitu kartu disposisi dibuat (status: disposisi)
+    autoArchive(
+      'masuk',
+      suratMasukId,
+      `ARS-M-${today.getFullYear()}/${surat.nomorAgenda || dispId}`,
+      surat.berkasUrl,
+      surat.perihal,
+      surat.nomorSuratAsal,
+      surat.klasifikasiId,
+      today.getFullYear(),
+      surat.jenisSuratId,
+      {
+        statusArsip: 'disposisi',
+      }
+    );
     
     return dispId;
   };
@@ -337,6 +401,25 @@ export function useBusinessLogic() {
         }});
       }
     });
+
+    // Pastikan arsip surat masuk tercatat (status: disposisi)
+    const smSurat = state.suratMasuk.find(s => s.id === disp.suratMasukId);
+    if (smSurat) {
+      autoArchive(
+        'masuk',
+        smSurat.id,
+        `ARS-M-${today.getFullYear()}/${smSurat.nomorAgenda || dispId}`,
+        smSurat.berkasUrl,
+        smSurat.perihal,
+        smSurat.nomorSuratAsal,
+        smSurat.klasifikasiId,
+        today.getFullYear(),
+        smSurat.jenisSuratId,
+        {
+          statusArsip: 'disposisi',
+        }
+      );
+    }
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -401,6 +484,17 @@ export function useBusinessLogic() {
     const bidangMatch = disp.bidangTujuan.find(b => b.unitKerjaId === user.unitKerjaId);
     if (!bidangMatch || bidangMatch.statusTerima !== 'diterima') {
       throw new Error("Bidang Anda belum menerima disposisi ini. Berikan paraf tanda terima terlebih dahulu.");
+    }
+
+    // B-03: Guard duplikat — cegah teruskan ulang bila sudah ada penugasan aktif untuk bidang ini
+    const myBidangStatus = disp.statusPerBidang?.[user.unitKerjaId!]?.status;
+    if (myBidangStatus === 'diteruskan_staf' || myBidangStatus === 'ditindak_langsung' || myBidangStatus === 'selesai') {
+      throw new Error("Bidang Anda sudah mengambil keputusan tindak lanjut untuk disposisi ini.");
+    }
+    const existingPenugasan = state.penugasan.find(p => p.disposisiId === dispId && p.stafId !== undefined && p.status !== 'selesai'
+      && state.users.find(u => u.id === p.stafId)?.unitKerjaId === user.unitKerjaId);
+    if (existingPenugasan) {
+      throw new Error("Sudah ada penugasan aktif dari bidang Anda. Selesaikan penugasan yang sedang berjalan terlebih dahulu.");
     }
     
     // Validasi WAJIB Tabel 24: staf tujuan wajib dipilih
@@ -474,6 +568,12 @@ export function useBusinessLogic() {
     if (!bidangMatch || bidangMatch.statusTerima !== 'diterima') {
       throw new Error("Bidang Anda belum menerima disposisi ini.");
     }
+
+    // B-02: Guard duplikat — cegah tindak lanjut langsung ulang bila bidang ini sudah finalized
+    const myBidangStatusTL = disp.statusPerBidang?.[user.unitKerjaId!]?.status;
+    if (myBidangStatusTL === 'ditindak_langsung' || myBidangStatusTL === 'selesai' || myBidangStatusTL === 'diteruskan_staf') {
+      throw new Error("Bidang Anda sudah mengambil keputusan tindak lanjut untuk disposisi ini.");
+    }
     
     if (!uraianHasil || !uraianHasil.trim()) {
       throw new Error("Uraian hasil tindak lanjut wajib diisi.");
@@ -532,7 +632,24 @@ export function useBusinessLogic() {
     }});
     
     if (allFinished && sm) {
-      autoArchive('masuk', sm.id, `ARS-M-${today.getFullYear()}/${dispId}`, sm.berkasUrl, sm.perihal, sm.nomorSuratAsal, sm.klasifikasiId, today.getFullYear(), sm.jenisSuratId);
+      const berkasLaporanUrl = file ? '/docs/tl-uploaded.pdf' : undefined;
+      autoArchive(
+        'masuk',
+        sm.id,
+        `ARS-M-${today.getFullYear()}/${sm.nomorAgenda || dispId}`,
+        sm.berkasUrl,
+        sm.perihal,
+        sm.nomorSuratAsal,
+        sm.klasifikasiId,
+        today.getFullYear(),
+        sm.jenisSuratId,
+        {
+          statusArsip: 'selesai',
+          laporanHasil: uraianHasil,
+          berkasLaporanUrl,
+          tanggalSelesai: today.toISOString(),
+        }
+      );
 
       const kadis = state.users.find(u => u.role === 'kepala_dinas');
       if (kadis) {
@@ -574,8 +691,9 @@ export function useBusinessLogic() {
   // ─────────────────────────────────────────────────────────────
   const apiLaporkanHasil = (dispId: string, uraianHasil: string, file: File | null) => {
     const user = validateRole(['staf_pelaksana']);
-    const penugasan = state.penugasan.find(p => p.disposisiId === dispId && p.stafId === user.id && p.status !== 'selesai');
-    if (!penugasan) throw new Error("Anda tidak memiliki penugasan aktif untuk disposisi ini.");
+    // G-01: Exclude 'menunggu_pemeriksaan' — cegah submit laporan kedua sebelum Kabid memeriksa
+    const penugasan = state.penugasan.find(p => p.disposisiId === dispId && p.stafId === user.id && p.status !== 'selesai' && (p.status as string) !== 'menunggu_pemeriksaan');
+    if (!penugasan) throw new Error("Anda tidak memiliki penugasan aktif untuk disposisi ini, atau laporan Anda sedang menunggu pemeriksaan.");
     if (!uraianHasil) throw new Error("Uraian hasil wajib diisi.");
 
     const today = new Date();
@@ -649,7 +767,12 @@ export function useBusinessLogic() {
       }});
       if (allFinished) {
         dispatch({ type: 'UPDATE_SURAT_MASUK', payload: { id: disp!.suratMasukId, status: 'selesai', updatedAt: today.toISOString() }});
-        if (sm) autoArchive('masuk', sm.id, `ARS-M-${today.getFullYear()}/${sm.id}`, sm.berkasUrl, sm.perihal, sm.nomorSuratAsal, sm.klasifikasiId, today.getFullYear(), sm.jenisSuratId);
+        // B-04: Pass statusArsip 'selesai' agar arsip yang sudah ada (status: disposisi) ter-update
+        if (sm) autoArchive('masuk', sm.id, `ARS-M-${today.getFullYear()}/${sm.nomorAgenda || sm.id}`, sm.berkasUrl, sm.perihal, sm.nomorSuratAsal, sm.klasifikasiId, today.getFullYear(), sm.jenisSuratId, {
+          statusArsip: 'selesai',
+          laporanHasil: tl.uraianHasil,
+          tanggalSelesai: today.toISOString(),
+        });
       }
 
       // Riwayat — Tabel 12 setuju (Bab 4)

@@ -363,13 +363,13 @@ export default function SuratMasukBaruPage() {
                 />
               </div>
 
-              {/* 7. Sifat — 5 pilihan dengan keterangan perlakuan */}
+              {/* 7. Sifat — 4 pilihan dengan keterangan perlakuan */}
               <div className="form-group">
                 <label className="form-label" id="label-sifat">
                   Sifat Surat <span className="required">*</span>
                 </label>
                 <div className="sifat-grid" role="radiogroup" aria-labelledby="label-sifat">
-                  {(['biasa', 'pemberitahuan', 'penting', 'segera', 'rahasia'] as SifatSurat[]).map((k) => (
+                  {(['biasa', 'penting', 'segera', 'rahasia'] as SifatSurat[]).map((k) => (
                     <label
                       key={k}
                       className={`sifat-opsi${form.sifat === k ? ' sifat-opsi-aktif' : ''}`}

@@ -10,6 +10,7 @@ import React, { use, useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import { ModalStandar } from '@/components/ui';
 import { useStore } from '@/lib/store';
 import { useBusinessLogic } from '@/lib/api';
 import { JENIS_INSTRUKSI_LABELS, JenisInstruksi, InstruksiDisposisi } from '@/lib/types';
@@ -148,23 +149,25 @@ function ModalKonfirmasi({
   loading?: boolean; children?: React.ReactNode;
 }) {
   return (
-    <div className="modal-overlay">
-      <div className="modal" style={{ maxWidth: 440 }}>
-        <div className="modal-header">
-          <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>{judul}</h2>
-        </div>
-        <div className="modal-body">
-          <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)', fontSize: 14 }}>{pesan}</p>
-          {children}
-        </div>
-        <div className="modal-footer" style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <button className="btn btn-secondary" onClick={onBatal} disabled={loading}>Batal</button>
-          <button className="btn btn-primary" onClick={onSetuju} disabled={loading}>
-            {loading ? 'Memproses...' : 'Ya, Lanjutkan'}
-          </button>
-        </div>
-      </div>
-    </div>
+    <ModalStandar
+      open={true}
+      onClose={onBatal}
+      judul={judul}
+      variant="konfirmasi"
+      size="sm"
+      loading={loading}
+      footerSecondary={
+        <button className="btn btn-secondary" onClick={onBatal} disabled={loading}>Batal</button>
+      }
+      footerPrimary={
+        <button className="btn btn-primary" onClick={onSetuju} disabled={loading}>
+          {loading ? 'Memproses...' : 'Ya, Lanjutkan'}
+        </button>
+      }
+    >
+      <p style={{ margin: '0 0 16px', color: 'var(--text-secondary)', fontSize: 14 }}>{pesan}</p>
+      {children}
+    </ModalStandar>
   );
 }
 
@@ -213,6 +216,18 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
   
   // Form: Staf Progres
   const [catatanProgres, setCatatanProgres] = useState('');
+
+  // U-01: Auto-dismiss toast
+  useEffect(() => {
+    if (!successMsg) return;
+    const t = setTimeout(() => setSuccessMsg(''), 5000);
+    return () => clearTimeout(t);
+  }, [successMsg]);
+  useEffect(() => {
+    if (!errorMsg) return;
+    const t = setTimeout(() => setErrorMsg(''), 8000);
+    return () => clearTimeout(t);
+  }, [errorMsg]);
 
   // ─── Data ────────────────────────────────────────────────────────────────
   const disposisi = state.disposisi.find(d => d.id === id);
@@ -329,8 +344,10 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
   const izin = hitungIzinZona(konteks);
 
   // ─── Helpers ─────────────────────────────────────────────────────────────
-  const unitKerja = state.unitKerja.sort((a, b) => (a.urutanLembar || 99) - (b.urutanLembar || 99));
-  const myStaf = state.users.filter(u => u.role === 'staf_pelaksana' && u.unitKerjaId === user?.unitKerjaId);
+  // G-02: Copy sebelum sort agar tidak memutasi state
+  const unitKerja = [...state.unitKerja].sort((a, b) => (a.urutanLembar || 99) - (b.urutanLembar || 99));
+  // G-03: Hanya tampilkan staf yang masih aktif di dropdown
+  const myStaf = state.users.filter(u => u.role === 'staf_pelaksana' && u.unitKerjaId === user?.unitKerjaId && u.aktif);
   const kadisUser = state.users.find(u => u.role === 'kepala_dinas' && u.aktif);
 
   const isKadis   = user?.role === 'kepala_dinas';
@@ -340,17 +357,22 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
   const isPetugas = user?.role === 'petugas_surat';
 
   const myBidangStatusObj = user?.unitKerjaId ? disposisi.statusPerBidang?.[user.unitKerjaId] : undefined;
-  const isMyBidangReceived = myBidangStatusObj?.status === 'diterima_bidang'
-    || myBidangStatusObj?.status === 'diteruskan_staf'
-    || myBidangStatusObj?.status === 'ditindak_langsung'
-    || myBidangItem?.statusTerima === 'diterima';
+  // B-01: isMyBidangReceived harus EXCLUDE status final, sehingga kartu aksi Z13 tidak muncul setelah keputusan
+  const isBidangFinalized = myBidangStatusObj?.status === 'ditindak_langsung'
+    || myBidangStatusObj?.status === 'selesai'
+    || myBidangStatusObj?.status === 'diteruskan_staf';
+  const isMyBidangReceived = !isBidangFinalized && (
+    myBidangStatusObj?.status === 'diterima_bidang'
+    || myBidangItem?.statusTerima === 'diterima'
+  );
 
   const sudahParaf = !!(disposisi.parafKdAt || disposisi.parafKepalaWaktu);
 
   // Progress multi-tujuan
   const totalTujuan = disposisi.bidangTujuan.length;
+  // B-05: Hitung selesai dari KEDUA jalur (langsung + staf)
   const selesaiTujuan = Object.values(disposisi.statusPerBidang || {})
-    .filter(s => s.status === 'ditindak_langsung').length;
+    .filter(s => s.status === 'ditindak_langsung' || s.status === 'selesai').length;
   const sebagianSelesai = totalTujuan > 1 && selesaiTujuan > 0 && selesaiTujuan < totalTujuan;
 
   // Toggle instruksi (multi-select)
@@ -784,23 +806,31 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
           </div>
         )}
 
-        {/* ── Pesan sukses / error ── */}
+        {/* ── Pesan sukses / error — Tahap 9: top-center toast ── */}
         {successMsg && (
           <div style={{
-            padding: '10px 16px', background: '#ecfdf5', border: '1px solid #10b981',
-            borderRadius: 8, color: '#047857', marginBottom: 12,
+            position: 'fixed', top: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 9999,
+            padding: '12px 20px', background: '#ecfdf5', border: '1px solid #10b981',
+            borderRadius: 8, color: '#047857', maxWidth: 480, minWidth: 280,
             display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'DM Sans, sans-serif',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            animation: 'fadeIn 0.3s ease-out',
           }}>
             <CheckCircle size={16} /> {successMsg}
+            <button onClick={() => setSuccessMsg('')} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#047857', fontSize: 16, lineHeight: 1 }}>✕</button>
           </div>
         )}
         {errorMsg && (
           <div style={{
-            padding: '10px 16px', background: '#fef2f2', border: '1px solid #f87171',
-            borderRadius: 8, color: '#b91c1c', marginBottom: 12,
+            position: 'fixed', top: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 9999,
+            padding: '12px 20px', background: '#fef2f2', border: '1px solid #f87171',
+            borderRadius: 8, color: '#b91c1c', maxWidth: 480, minWidth: 280,
             display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'DM Sans, sans-serif',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            animation: 'fadeIn 0.3s ease-out',
           }}>
             <AlertCircle size={16} /> {errorMsg}
+            <button onClick={() => setErrorMsg('')} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#b91c1c', fontSize: 16, lineHeight: 1 }}>✕</button>
           </div>
         )}
 
@@ -1345,63 +1375,73 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
 
                   {/* Kabid: dua kartu aksi */}
                   {isKabid && izin.Z13 === 'isi' && isMyBidangReceived && (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                      {/* Teruskan ke Staf */}
-                      <div style={{ border: '1px solid var(--border-color)', borderRadius: 8, padding: 16 }}>
-                        <h4 style={{ margin: '0 0 12px', fontSize: 14 }}>
-                          <UserPlus size={14} style={{ display: 'inline', marginRight: 6 }} />
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
+                      {/* Kartu: Teruskan ke Staf */}
+                      <div style={{ border: '1px solid var(--border-color)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <UserPlus size={14} />
                           Teruskan ke Staf Pelaksana
                         </h4>
-                        <select
-                          className="form-control"
-                          value={selectedStaf}
-                          onChange={e => setSelectedStaf(e.target.value)}
-                          style={{ marginBottom: 8 }}
-                        >
-                          <option value="">-- Pilih staf pelaksana --</option>
-                          {myStaf.map(s => <option key={s.id} value={s.id}>{s.nama}</option>)}
-                        </select>
-                        <textarea
-                          className="form-control"
-                          rows={2}
-                          placeholder="Catatan penugasan (opsional)"
-                          value={catatanPenugasan}
-                          onChange={e => setCatatanPenugasan(e.target.value)}
-                          style={{ marginBottom: 8 }}
-                        />
-                        <button className="btn btn-primary btn-sm" onClick={handleTeruskanStaf} style={{ width: '100%' }}>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: 'var(--text-secondary)' }}>Pilih Staf Pelaksana <span style={{ color: 'var(--rahasia)' }}>*</span></label>
+                          <select
+                            className="form-control"
+                            value={selectedStaf}
+                            onChange={e => setSelectedStaf(e.target.value)}
+                          >
+                            <option value="">-- Pilih staf pelaksana --</option>
+                            {myStaf.map(s => <option key={s.id} value={s.id}>{s.nama}</option>)}
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: 'var(--text-secondary)' }}>Catatan Penugasan</label>
+                          <textarea
+                            className="form-control"
+                            rows={2}
+                            placeholder="Catatan penugasan (opsional)"
+                            value={catatanPenugasan}
+                            onChange={e => setCatatanPenugasan(e.target.value)}
+                          />
+                        </div>
+                        <button className="btn btn-primary btn-sm" onClick={handleTeruskanStaf} style={{ width: '100%', minHeight: 44 }}>
                           Teruskan ke Staf
                         </button>
                       </div>
 
-                      {/* Tindak Lanjut Langsung */}
-                      <div style={{ border: '1px solid var(--border-color)', borderRadius: 8, padding: 16 }}>
-                        <h4 style={{ margin: '0 0 12px', fontSize: 14 }}>
-                          <CheckCircle size={14} style={{ display: 'inline', marginRight: 6 }} />
+                      {/* Kartu: Tindak Lanjut Langsung */}
+                      <div style={{ border: '1px solid var(--border-color)', borderRadius: 8, padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                        <h4 style={{ margin: 0, fontSize: 14, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <CheckCircle size={14} />
                           Tindak Lanjuti Langsung
                         </h4>
-                        <textarea
-                          className="form-control"
-                          rows={3}
-                          placeholder="Uraian hasil tindak lanjut (wajib)"
-                          value={uraianHasil}
-                          onChange={e => setUraianHasil(e.target.value)}
-                          style={{ marginBottom: 8 }}
-                        />
-                        <input
-                          type="file"
-                          accept=".pdf"
-                          onChange={e => setFileBerkas(e.target.files?.[0] || null)}
-                          style={{ marginBottom: 12, fontSize: 12 }}
-                        />
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: 'var(--text-secondary)' }}>Uraian Hasil <span style={{ color: 'var(--rahasia)' }}>*</span></label>
+                          <textarea
+                            className="form-control"
+                            rows={3}
+                            placeholder="Uraian hasil tindak lanjut (wajib)"
+                            value={uraianHasil}
+                            onChange={e => setUraianHasil(e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 4, color: 'var(--text-secondary)' }}>Berkas Pendukung (PDF)</label>
+                          <input
+                            type="file"
+                            accept=".pdf"
+                            onChange={e => setFileBerkas(e.target.files?.[0] || null)}
+                            className="form-control"
+                            style={{ padding: '8px 10px', fontSize: 13 }}
+                          />
+                        </div>
                         {/* AT-06: Pilih apakah perlu surat jawaban (wajib) */}
-                        <div style={{ marginBottom: 12 }}>
-                          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6, color: 'var(--tinta)' }}>
+                        <div>
+                          <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 6, color: 'var(--text-secondary)' }}>
                             Perlu surat jawaban? <span style={{ color: 'var(--rahasia)' }}>*</span>
                           </div>
                           <div style={{ display: 'flex', gap: 16 }}>
                             {[{ v: true, label: 'Ya — Perlu surat jawaban' }, { v: false, label: 'Tidak perlu' }].map(opt => (
-                              <label key={String(opt.v)} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                              <label key={String(opt.v)} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13, minHeight: 32 }}>
                                 <input
                                   type="radio"
                                   name="perlu-jawaban-langsung"
@@ -1416,7 +1456,7 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
                         <button
                           className="btn btn-success btn-sm"
                           onClick={handleTindakLangsung}
-                          style={{ width: '100%' }}
+                          style={{ width: '100%', minHeight: 44 }}
                           disabled={perluSuratJawaban === null}
                           title={perluSuratJawaban === null ? 'Pilih kebutuhan surat jawaban terlebih dahulu' : ''}
                         >
@@ -1457,9 +1497,18 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
                             <div><strong>Staf:</strong> {staf?.nama || '—'}</div>
                             <div><strong>Catatan:</strong> {p.catatanPenugasan || '—'}</div>
                             <div><strong>Status:</strong>{' '}
-                              <span className={`badge ${p.status === 'selesai' ? 'badge-success' : p.status === 'dikembalikan' ? 'badge-danger' : 'badge-info'}`} style={{ fontSize: 11 }}>
-                                {p.status}
-                              </span>
+                              {(() => {
+                                const statusLabel: Record<string, string> = {
+                                  ditugaskan: 'Ditugaskan', dikerjakan: 'Sedang Dikerjakan',
+                                  menunggu_pemeriksaan: 'Menunggu Pemeriksaan', selesai: 'Selesai',
+                                  dikembalikan: 'Dikembalikan', perlu_perbaikan: 'Perlu Perbaikan',
+                                };
+                                return (
+                                  <span className={`badge ${p.status === 'selesai' ? 'badge-success' : p.status === 'dikembalikan' || p.status === 'perlu_perbaikan' ? 'badge-danger' : p.status === 'menunggu_pemeriksaan' ? 'badge-warning' : 'badge-info'}`} style={{ fontSize: 11 }}>
+                                    {statusLabel[p.status as string] || p.status}
+                                  </span>
+                                );
+                              })()}
                             </div>
                           </div>
                         );

@@ -313,6 +313,14 @@ function appReducer(state: AppState, action: StoreAction | { type: 'HYDRATE_FROM
     case 'ADD_ARSIP':
       return { ...state, arsip: [...state.arsip, (action as Extract<StoreAction, { type: 'ADD_ARSIP' }>).payload] };
 
+    case 'UPDATE_ARSIP': {
+      const payload = (action as Extract<StoreAction, { type: 'UPDATE_ARSIP' }>).payload;
+      return {
+        ...state,
+        arsip: state.arsip.map((a) => (a.id === payload.id ? { ...a, ...payload } : a)),
+      };
+    }
+
     case 'UPDATE_COUNTER': {
       const p = (action as Extract<StoreAction, { type: 'UPDATE_COUNTER' }>).payload;
       const exists = state.nomorSuratCounter?.find(

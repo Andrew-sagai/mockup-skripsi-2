@@ -360,6 +360,14 @@ export interface ArsipDigital {
   jenisSuratId?: string;
   jenisSuratObj?: JenisSurat;
   createdAt: string;
+  statusArsip?: 'disposisi' | 'selesai' | 'terkirim';
+  laporanHasil?: string;
+  berkasLaporanUrl?: string;
+  tanggalSelesai?: string;
+  suratBalasanId?: string;
+  suratBalasanNomor?: string;
+  suratBalasanPerihal?: string;
+  isSuratBalasan?: boolean;
 }
 
 export interface Notifikasi {
@@ -439,6 +447,7 @@ export type StoreAction =
   | { type: 'UPDATE_UNIT_KERJA'; payload: Partial<UnitKerja> & { id: string } }
   | { type: 'DELETE_UNIT_KERJA'; payload: string }
   | { type: 'ADD_ARSIP'; payload: ArsipDigital }
+  | { type: 'UPDATE_ARSIP'; payload: Partial<ArsipDigital> & { id: string } }
   | { type: 'UPDATE_COUNTER'; payload: { tahun: number; klasifikasiKode: string; counter: number } }
   | { type: 'ADD_JENIS_SURAT'; payload: JenisSurat }
   | { type: 'UPDATE_JENIS_SURAT'; payload: Partial<JenisSurat> & { id: string } };

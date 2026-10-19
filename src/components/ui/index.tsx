@@ -283,3 +283,99 @@ export function UnggahPdf({
     </div>
   );
 }
+
+// ============================================================
+// ModalStandar — Tahap 7: Komponen modal standar reusable
+// ============================================================
+import { useEffect } from 'react';
+import { AlertTriangle as ModalAlertIcon, CheckCircle2 as ModalCheckIcon } from 'lucide-react';
+
+type ModalVariant = 'konfirmasi' | 'error' | 'sukses' | 'form';
+type ModalSize = 'sm' | 'md' | 'lg';
+
+interface ModalStandarProps {
+  open: boolean;
+  onClose: () => void;
+  judul: string;
+  variant?: ModalVariant;
+  size?: ModalSize;
+  children: ReactNode;
+  /** Footer kiri (tombol sekunder) */
+  footerSecondary?: ReactNode;
+  /** Footer kanan (tombol primer) */
+  footerPrimary?: ReactNode;
+  /** Auto-close setelah N milidetik (untuk variant sukses) */
+  autoCloseMs?: number;
+  loading?: boolean;
+}
+
+const MODAL_SIZE_MAP: Record<ModalSize, number> = { sm: 400, md: 540, lg: 680 };
+
+const VARIANT_ICON: Partial<Record<ModalVariant, ReactNode>> = {
+  error: <ModalAlertIcon size={22} style={{ color: '#dc2626' }} />,
+  sukses: <ModalCheckIcon size={22} style={{ color: '#16a34a' }} />,
+  konfirmasi: <ModalAlertIcon size={22} style={{ color: '#d97706' }} />,
+};
+
+export function ModalStandar({
+  open, onClose, judul, variant = 'form', size = 'md',
+  children, footerSecondary, footerPrimary, autoCloseMs, loading,
+}: ModalStandarProps) {
+  // ESC to close
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [open, onClose]);
+
+  // Auto-close (sukses variant)
+  useEffect(() => {
+    if (!open || !autoCloseMs) return;
+    const t = setTimeout(onClose, autoCloseMs);
+    return () => clearTimeout(t);
+  }, [open, autoCloseMs, onClose]);
+
+  if (!open) return null;
+
+  const maxW = MODAL_SIZE_MAP[size];
+  const icon = VARIANT_ICON[variant];
+
+  return (
+    <div className="modal-overlay" onClick={onClose} style={{ animation: 'fadeIn 0.2s ease-out' }}>
+      <div
+        className="modal"
+        onClick={e => e.stopPropagation()}
+        style={{
+          maxWidth: maxW,
+          width: '90vw',
+          animation: 'fadeIn 0.2s ease-out',
+          display: 'flex', flexDirection: 'column',
+        }}
+        role="dialog"
+        aria-modal="true"
+        aria-label={judul}
+      >
+        {/* Header */}
+        <div className="modal-header" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {icon}
+          <h2 style={{ flex: 1, margin: 0, fontSize: 16 }}>{judul}</h2>
+          <button className="modal-close" onClick={onClose} aria-label="Tutup modal">✕</button>
+        </div>
+
+        {/* Body */}
+        <div className="modal-body">
+          {children}
+        </div>
+
+        {/* Footer */}
+        {(footerSecondary || footerPrimary) && (
+          <div className="modal-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            {footerSecondary}
+            {footerPrimary}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -16,7 +16,8 @@ export default function DisposisiPage() {
   const isKadis = user?.role === 'kepala_dinas';
   const isKabid = user?.role === 'kepala_bidang';
 
-  let disposisiList = getScopedDisposisi();
+  let disposisiList = getScopedDisposisi()
+    .sort((a: any, b: any) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
   if (user?.role === 'petugas_surat' || user?.role === 'admin') {
     const pendingSm = state.suratMasuk.filter(sm => sm.status === 'diagenda');

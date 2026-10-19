@@ -146,13 +146,14 @@ ${type === 'salinan' ? '% CATATAN: Ini adalah salinan arsip dengan riwayat paraf
                 <th>Perihal</th>
                 <th>Kode Klasifikasi Arsip</th>
                 <th>Tahun</th>
+                <th>Status</th>
                 <th>Aksi</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8}>
+                  <td colSpan={9}>
                     <div className="empty-state">
                       <Archive size={48} />
                       <h3>Arsip tidak ditemukan</h3>
@@ -194,6 +195,18 @@ ${type === 'salinan' ? '% CATATAN: Ini adalah salinan arsip dengan riwayat paraf
                       </span>
                     </td>
                     <td style={{ fontSize: 13 }}>{a.tahun}</td>
+                    <td>
+                      {(() => {
+                        const st = (a as any).statusArsip || 'selesai';
+                        const cfg: Record<string, { cls: string; label: string }> = {
+                          disposisi: { cls: 'badge-warning', label: 'Dalam Proses' },
+                          selesai: { cls: 'badge-success', label: 'Selesai' },
+                          terkirim: { cls: 'badge-info', label: 'Terkirim' },
+                        };
+                        const c = cfg[st] || { cls: 'badge-gray', label: st };
+                        return <span className={`badge ${c.cls}`} style={{ fontSize: 11 }}>{c.label}</span>;
+                      })()}
+                    </td>
                     <td>
                       <div className="table-actions">
                         <button 
