@@ -1262,7 +1262,7 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
               <div className="panel-lanjutan">
                 <div className="pl-header" style={{ background: '#f0fdfa' }}>
                   <span style={{ color: '#0F766E' }}>●</span>
-                  <span>Z11 — Catatan Koordinasi Sekretaris</span>
+                  <span>Catatan Koordinasi Sekretaris</span>
                   {izin.Z11 === 'isi' && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#0F766E' }}>Bagian Anda</span>}
                 </div>
                 <div className="pl-body">
@@ -1294,7 +1294,7 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
               <div className="panel-lanjutan">
                 <div className="pl-header" style={{ background: '#fffbeb' }}>
                   <span style={{ color: '#B45309' }}>●</span>
-                  <span>Z12 — Tanda Terima Bidang</span>
+                  <span>Tanda Terima Bidang</span>
                 </div>
                 <div className="pl-body">
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontFamily: 'DM Sans, sans-serif' }}>
@@ -1359,7 +1359,7 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
               <div className="panel-lanjutan">
                 <div className="pl-header" style={{ background: '#fffbeb' }}>
                   <span style={{ color: '#B45309' }}>●</span>
-                  <span>Z13 — Keputusan Tindak Lanjut &amp; Penugasan Staf</span>
+                  <span>Keputusan Tindak Lanjut &amp; Penugasan Staf</span>
                   {izin.Z13 === 'isi' && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#B45309' }}>Bagian Anda</span>}
                 </div>
                 <div className="pl-body">
@@ -1524,7 +1524,7 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
               <div className="panel-lanjutan">
                 <div className="pl-header" style={{ background: '#faf5ff' }}>
                   <span style={{ color: '#6941C6' }}>●</span>
-                  <span>Z14 — Laporan Tindak Lanjut</span>
+                  <span>Laporan Tindak Lanjut</span>
                   {izin.Z14 === 'isi' && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#6941C6' }}>Bagian Anda</span>}
                 </div>
                 <div className="pl-body">
@@ -1633,7 +1633,7 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
               <div className="panel-lanjutan">
                 <div className="pl-header" style={{ background: '#fffbeb' }}>
                   <span style={{ color: '#B45309' }}>●</span>
-                  <span>Z15 — Pemeriksaan Hasil</span>
+                  <span>Pemeriksaan Hasil</span>
                   {izin.Z15 === 'isi' && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#B45309' }}>Bagian Anda</span>}
                 </div>
                 <div className="pl-body">
@@ -1714,7 +1714,7 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
               <div className="panel-lanjutan">
                 <div className="pl-header">
                   <Clock size={14} />
-                  <span>Z16 — Riwayat Kartu</span>
+                  <span>Riwayat Kartu</span>
                   <Link href={`/pelacakan?surat=${sm?.id}`} style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--primary-500)' }}>
                     Lihat pelacakan lengkap →
                   </Link>
