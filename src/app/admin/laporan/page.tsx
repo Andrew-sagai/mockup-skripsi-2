@@ -1,15 +1,17 @@
 'use client';
-import React from 'react';
+import React, { useState } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useStore } from '@/lib/store';
 import { USER_ROLE_LABELS } from '@/lib/types';
+import { Toast } from '@/components/ui';
 import { Download, Users, Activity } from 'lucide-react';
 
 export default function LaporanAdminPage() {
   const { state } = useStore();
+  const [toastPesan, setToastPesan] = useState<string | null>(null);
 
   const handleDownload = () => {
-    alert('Mengunduh laporan dalam format PDF/Excel... (Simulasi)');
+    setToastPesan('Fitur unduh laporan akan tersedia pada versi produksi. (Simulasi)');
   };
 
   return (
@@ -82,6 +84,8 @@ export default function LaporanAdminPage() {
             </div>
           </div>
         </div>
+        {/* P9: Toast info */}
+        <Toast pesan={toastPesan} tingkat="info" onTutup={() => setToastPesan(null)} />
       </div>
     </DashboardLayout>
   );

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import {
   BookOpen, Clock, Send, Inbox, Forward, ClipboardCheck,
@@ -11,7 +11,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { Tone, StatusDef, SifatDef, HasilTenggat, JenisStatus } from '@/lib/status';
 import { resolveStatus, SIFAT_DEFS, hitungTenggat } from '@/lib/status';
 import type { SifatSurat } from '@/lib/types';
-import { useState, useRef, useCallback, type ReactNode } from 'react';
+import { useState, useRef, useCallback, useEffect, type ReactNode } from 'react';
 
 // --- Peta ikon berdasar nama string ---
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -27,7 +27,7 @@ function resolveIcon(name: string): LucideIcon {
 }
 
 // ============================================================
-// ChipStatus — tampilkan status surat/disposisi sebagai chip
+// ChipStatus â€” tampilkan status surat/disposisi sebagai chip
 // ============================================================
 interface ChipStatusProps {
   jenis: JenisStatus;
@@ -57,7 +57,7 @@ export function ChipStatus({ jenis, status, compact }: ChipStatusProps) {
 }
 
 // ============================================================
-// BadgeSifat — tampilkan sifat surat
+// BadgeSifat â€” tampilkan sifat surat
 // ============================================================
 interface BadgeSifatProps {
   sifat: SifatSurat;
@@ -77,7 +77,7 @@ export function BadgeSifat({ sifat }: BadgeSifatProps) {
 }
 
 // ============================================================
-// PenandaBatasWaktu — tampilkan tenggat dengan indikator warna
+// PenandaBatasWaktu â€” tampilkan tenggat dengan indikator warna
 // ============================================================
 interface PenandaBatasWaktuProps {
   tanggal: string | Date;
@@ -110,7 +110,7 @@ export function PenandaBatasWaktu({ tanggal, sekarang }: PenandaBatasWaktuProps)
 }
 
 // ============================================================
-// KonfirmasiDialog — dialog konfirmasi dengan <dialog> native
+// KonfirmasiDialog â€” dialog konfirmasi dengan <dialog> native
 // ============================================================
 interface KonfirmasiDialogProps {
   open: boolean;
@@ -182,7 +182,7 @@ export function KonfirmasiDialog({
 }
 
 // ============================================================
-// UnggahPdf — kontrol unggah berkas PDF (prototipe, client-side)
+// UnggahPdf â€” kontrol unggah berkas PDF (prototipe, client-side)
 // ============================================================
 interface UnggahPdfProps {
   value: string | null;
@@ -285,9 +285,8 @@ export function UnggahPdf({
 }
 
 // ============================================================
-// ModalStandar — Tahap 7: Komponen modal standar reusable
+// ModalStandar â€” Tahap 7: Komponen modal standar reusable
 // ============================================================
-import { useEffect } from 'react';
 import { AlertTriangle as ModalAlertIcon, CheckCircle2 as ModalCheckIcon } from 'lucide-react';
 
 type ModalVariant = 'konfirmasi' | 'error' | 'sukses' | 'form';
@@ -360,7 +359,7 @@ export function ModalStandar({
         <div className="modal-header" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           {icon}
           <h2 style={{ flex: 1, margin: 0, fontSize: 16 }}>{judul}</h2>
-          <button className="modal-close" onClick={onClose} aria-label="Tutup modal">✕</button>
+          <button className="modal-close" onClick={onClose} aria-label="Tutup modal">âœ•</button>
         </div>
 
         {/* Body */}
@@ -379,3 +378,77 @@ export function ModalStandar({
     </div>
   );
 }
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Toast (P9) â€” komponen notifikasi tengah atas
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+export type ToastTingkat = 'sukses' | 'info' | 'peringatan' | 'galat';
+
+export interface ToastProps {
+  /** Teks pesan yang ditampilkan. Kosong / null = tersembunyi. */
+  pesan: string | null;
+  tingkat?: ToastTingkat;
+  /** Panggil untuk menutup toast dari luar (mis. reset state). */
+  onTutup: () => void;
+}
+
+const TOAST_COLORS: Record<ToastTingkat, { bg: string; border: string; text: string }> = {
+  sukses:    { bg: '#ecfdf5', border: '#10b981', text: '#047857' },
+  info:      { bg: '#eff6ff', border: '#3b82f6', text: '#1d4ed8' },
+  peringatan:{ bg: '#fffbeb', border: '#f59e0b', text: '#92400e' },
+  galat:     { bg: '#fef2f2', border: '#f87171', text: '#b91c1c' },
+};
+
+/** Durasi auto-dismiss (ms). galat dan peringatan tidak auto-dismiss. */
+const AUTO_DISMISS_MS: Partial<Record<ToastTingkat, number>> = {
+  sukses: 5000,
+  info:   5000,
+};
+
+export function Toast({ pesan, tingkat = 'info', onTutup }: ToastProps) {
+  useEffect(() => {
+    if (!pesan) return;
+    const ms = AUTO_DISMISS_MS[tingkat];
+    if (!ms) return;
+    const t = setTimeout(onTutup, ms);
+    return () => clearTimeout(t);
+  }, [pesan, tingkat, onTutup]);
+
+  if (!pesan) return null;
+
+  const c = TOAST_COLORS[tingkat];
+  return (
+    <div
+      role="alert"
+      aria-live="polite"
+      style={{
+        position: 'fixed', top: 24, left: '50%', transform: 'translateX(-50%)',
+        zIndex: 2000,
+        padding: '12px 20px',
+        background: c.bg,
+        border: `1px solid ${c.border}`,
+        borderRadius: 8,
+        color: c.text,
+        maxWidth: 480, minWidth: 280,
+        display: 'flex', alignItems: 'center', gap: 8,
+        boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+        animation: 'fadeIn 0.25s ease-out',
+        fontWeight: 500,
+        fontSize: 14,
+      }}
+    >
+      <span style={{ flex: 1 }}>{pesan}</span>
+      <button
+        onClick={onTutup}
+        aria-label="Tutup notifikasi"
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: c.text, fontSize: 16, lineHeight: 1, padding: '0 2px',
+          flexShrink: 0,
+        }}
+      >âœ•</button>
+    </div>
+  );
+}
+
