@@ -39,4 +39,5 @@
 - **Komponen**: `src/components/dashboard/StafDashboard.tsx`
   - *Penjelasan*: Logika penghitungan aktif/selesai tercampur langsung dengan kondisi rendering `<td colSpan={5}>`. Peringatan: Saat mengganti *empty state* atau tabel, jumlah *loop map()* tidak boleh digeser atau di-bypass.
 - **Komponen**: `src/app/tindak-lanjut/page.tsx`
-  - *Penjelasan*: *useMemo* bergantung pada struktur *state.disposisi* dan *tindakLanjut*. Jangan ubah variabel *derivedStatus* saat mengganti `<Badge>`.
+  - *Penjelasan*: *useMemo* bergantung pada struktur *state.disposisi* dan *tindakLanjut*. Catatan hooks ordering sebelumnya telah diselesaikan pada commit `3b91a71` dan seluruh halaman telah lulus kompilasi tanpa pelanggaran rules-of-hooks.
+

@@ -84,3 +84,19 @@ Membungkus `<dialog>` HTML5 dengan fokus `backdrop`.
 ### 2.5 `<UnggahPdf />`
 Formulir unggah (*drag & drop*) client-side untuk memvalidasi lampiran PDF.
 - **Props**: `value` (obj-url / null), `onChange`, `maxMB` (batas ukuran).
+
+### 2.6 `<ModalStandar />`
+Komponen modal dialog terstandarisasi yang fleksibel dan aksesibel (mendukung tombol Escape untuk menutup, fokus terkunci di modal, `role="dialog"`, dan auto-close opsional).
+- **Props**:
+  - `open: boolean`: Mengontrol visibilitas modal.
+  - `onClose: () => void`: Callback penutupan modal.
+  - `judul: string`: Judul panel modal.
+  - `variant?: 'konfirmasi' | 'error' | 'sukses' | 'form'`: Menentukan ikon penanda dan aksen warna header.
+  - `size?: 'sm' | 'md' | 'lg'`: Lebar maksimum modal (400px, 540px, 680px).
+  - `children: ReactNode`: Konten utama dalam badan modal.
+  - `footerSecondary?: ReactNode`: Elemen aksi di sisi kiri bawah (misal: tombol Batal).
+  - `footerPrimary?: ReactNode`: Elemen aksi di sisi kanan bawah (misal: tombol Simpan / Konfirmasi).
+  - `autoCloseMs?: number`: Durasi auto-dismiss dalam milidetik (efektif untuk varian `sukses`).
+  - `loading?: boolean`: Status loading saat aksi diproses.
+- **Tata Letak Standar**: Tombol Batal/Sekunder diletakkan di sisi kiri footer, sedangkan tombol Aksi Utama/Primer di sisi kanan footer.
+

@@ -460,6 +460,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     
     if (user.dummyPassword === cleanPass) {
+      // Tulis cookie sekarang juga: middleware membacanya pada navigasi berikutnya,
+      // sebelum useEffect sinkronisasi cookie sempat berjalan.
+      document.cookie = `userRole=${user.role}; path=/; max-age=86400; SameSite=Lax`;
+      sessionStorage.setItem('surat-dinas-session', user.id);
       dispatch({ type: 'LOGIN', payload: user });
       return user;
     }

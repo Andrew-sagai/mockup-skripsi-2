@@ -3,6 +3,7 @@ import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
+import { urutkanTerbaru } from '@/lib/utils';
 import { getBatasWaktuState } from '@/lib/batas-waktu';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { JENIS_INSTRUKSI_LABELS } from '@/lib/types';
@@ -57,9 +58,9 @@ export default function TugasSayaPage() {
     }).filter(p => p.d); // must have valid disposisi
 
     if (filterStatus !== 'semua') {
-      return mappedPenugasan.filter(p => p.derivedStatus === filterStatus);
+      return urutkanTerbaru(mappedPenugasan, (p) => p.d?.createdAt).filter(p => p.derivedStatus === filterStatus);
     }
-    return mappedPenugasan;
+    return urutkanTerbaru(mappedPenugasan, (p) => p.d?.createdAt);
   }, [myPenugasan, filterStatus, state.disposisi, state.tindakLanjut, user]);
 
   // Access Control

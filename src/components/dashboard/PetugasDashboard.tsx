@@ -3,6 +3,7 @@ import React, { useMemo } from 'react';
 import Link from 'next/link';
 import { useStore } from '@/lib/store';
 import { STATUS_SURAT_KELUAR_LABELS } from '@/lib/types';
+import { urutkanTerbaru } from '@/lib/utils';
 import { ChipStatus, PenandaBatasWaktu } from '@/components/ui';
 import { MailOpen, Send, Clock, FileCheck, Book, AlertTriangle, ArrowRight, CheckCircle2 } from 'lucide-react';
 
@@ -31,9 +32,11 @@ export default function PetugasDashboard() {
   const terkirim          = state.suratKeluar.filter((s) => s.status === 'terkirim').length;
 
   // Surat masuk diagenda (belum diajukan disposisi) — perlu tindakan Petugas
-  const perluDisposisi = state.suratMasuk
-    .filter((s) => s.status === 'diagenda')
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  // P5: terbaru di atas agar entri baru langsung tampil pertama
+  const perluDisposisi = urutkanTerbaru(
+    state.suratMasuk.filter((s) => s.status === 'diagenda'),
+    (s) => s.createdAt,
+  );
 
   // Surat masuk terbaru
   const suratMasukTerbaru = [...state.suratMasuk]

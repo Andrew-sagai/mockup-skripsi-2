@@ -8,7 +8,7 @@ import { useBusinessLogic } from '@/lib/api';
 import { STATUS_SURAT_KELUAR_LABELS, SIFAT_SURAT_LABELS } from '@/lib/types';
 import { hasPermission } from '@/lib/rbac';
 import { ChipStatus } from '@/components/ui';
-import { KonfirmasiDialog } from '@/components/ui';
+import { ModalStandar } from '@/components/ui';
 import {
   ArrowLeft, CheckCircle2, FileText, Send, AlertCircle, Upload, X, Eye,
   Hash, Stamp, Truck, Archive, Info, Lock, ExternalLink, PenTool
@@ -634,15 +634,29 @@ export default function SuratKeluarDetailPage({ params }: { params: Promise<{ id
         )}
 
         {/* ─── Dialog Konfirmasi Kirim ────────────────────────── */}
-        <KonfirmasiDialog
+        <ModalStandar
           open={showKonfirmasi}
           onClose={() => setKonfirmasi(false)}
-          onConfirm={handleKirim}
           judul="Tandai Terkirim?"
-          pesan={`Surat keluar "${surat.perihal}" akan ditandai terkirim dan arsip digital dibuat otomatis. Tindakan ini tidak dapat dibatalkan.`}
-          labelKonfirmasi="Ya, Tandai Terkirim"
-          bahaya={false}
-        />
+          variant="konfirmasi"
+          size="sm"
+          footerSecondary={
+            <button type="button" className="btn btn-ghost" onClick={() => setKonfirmasi(false)}>Batal</button>
+          }
+          footerPrimary={
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => { setKonfirmasi(false); handleKirim(); }}
+            >
+              Ya, Tandai Terkirim
+            </button>
+          }
+        >
+          <p style={{ fontSize: 13, lineHeight: 1.6, margin: 0 }}>
+            Surat keluar "{surat.perihal}" akan ditandai terkirim dan arsip digital dibuat otomatis. Tindakan ini tidak dapat dibatalkan.
+          </p>
+        </ModalStandar>
       </div>
     </DashboardLayout>
   );

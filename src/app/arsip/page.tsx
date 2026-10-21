@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useStore } from '@/lib/store';
+import { urutkanTerbaru } from '@/lib/utils';
 import { Search, Archive, Download, FileText } from 'lucide-react';
 
 export default function ArsipPage() {
@@ -27,7 +28,7 @@ export default function ArsipPage() {
   const user = state.currentUser;
   const isPetugas = user?.role === 'petugas_surat';
 
-  const arsipList = getScopedArsip();
+  const arsipList = urutkanTerbaru(getScopedArsip(), (a) => a.createdAt);
 
   const handleDownload = (arsip: typeof state.arsip[0], type: 'asli' | 'salinan' = 'asli') => {
     // Generate text/pdf dummy blob with official header & metadata

@@ -47,8 +47,8 @@ export default function SuratMasukBaruPage() {
   const [saving, setSaving]           = useState(false);
   const [errorMsg, setErrorMsg]       = useState('');
   const [keadaan, setKeadaan]         = useState<Keadaan>('isian');
-  const [hasilAgenda, setHasilAgenda] = useState('');
   const [hasilSuratId, setHasilSuratId] = useState('');
+  const hasilAgenda = state.suratMasuk.find((s) => s.id === hasilSuratId)?.nomorAgenda || '';
 
   // Urutkan jenis surat: utama lebih dahulu
   const sortedJenisSurat = [...state.jenisSurat.filter((j) => j.aktif)].sort((a, b) => {
@@ -130,13 +130,11 @@ export default function SuratMasukBaruPage() {
         } as any,
         file
       );
-      // Cari surat yang baru saja ditambahkan (nomor agenda terbaru)
-      const newest = [...state.suratMasuk].sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      )[0];
-      setHasilAgenda(newest?.nomorAgenda || '—');
-      setHasilSuratId(newest?.id || '');
+      // apiCatatSuratMasuk mengembalikan id surat baru; state belum ter-update di render ini,
+      // jadi nomor agenda dibaca dari state saat layar konfirmasi dirender.
+      setHasilSuratId(result as string);
       setKeadaan('berhasil');
+
     } catch (err: any) {
       // Bila gagal: data tidak tersimpan, isian tetap terisi
       setErrorMsg(err.message);

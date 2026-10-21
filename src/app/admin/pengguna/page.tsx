@@ -4,6 +4,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useStore } from '@/lib/store';
 import { useBusinessLogic } from '@/lib/api';
 import { USER_ROLE_LABELS, UserRole } from '@/lib/types';
+import { urutkanTerbaru } from '@/lib/utils';
 import { KonfirmasiDialog } from '@/components/ui';
 import { Plus, UserX, UserCheck, Search, Key, Edit3, AlertCircle, CheckCircle2, Mail } from 'lucide-react';
 
@@ -39,13 +40,16 @@ export default function PenggunaPage() {
   const sekretariatUnit = state.unitKerja.find((u) => u.jenis === 'sekretariat');
   const bidangAktif     = state.unitKerja.filter((u) => u.jenis === 'bidang' && u.aktif);
 
-  const filtered = state.users.filter((u) => {
-    const q = search.toLowerCase();
-    const matchSearch = !q || u.nama.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
-    const matchRole   = filterRole === 'all' || u.role === filterRole;
-    const matchStatus = filterStatus === 'all' || (filterStatus === 'aktif' ? u.aktif : !u.aktif);
-    return matchSearch && matchRole && matchStatus;
-  });
+  const filtered = urutkanTerbaru(
+    state.users.filter((u) => {
+      const q = search.toLowerCase();
+      const matchSearch = !q || u.nama.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+      const matchRole   = filterRole === 'all' || u.role === filterRole;
+      const matchStatus = filterStatus === 'all' || (filterStatus === 'aktif' ? u.aktif : !u.aktif);
+      return matchSearch && matchRole && matchStatus;
+    }),
+    (u) => u.createdAt,
+  );
 
   // ── Tambah ──────────────────────────────────────────────────
   const handleRoleChange = (newRole: UserRole) => {
