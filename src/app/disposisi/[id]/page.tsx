@@ -10,7 +10,7 @@ import React, { use, useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { ModalStandar } from '@/components/ui';
+import { ModalStandar, PdfViewerEmbedded, KonsepSuratPreview, ChipStatus } from '@/components/ui';
 import { useStore } from '@/lib/store';
 import { useBusinessLogic } from '@/lib/api';
 import { JENIS_INSTRUKSI_LABELS, JenisInstruksi, InstruksiDisposisi } from '@/lib/types';
@@ -20,8 +20,9 @@ import {
 import {
   ArrowLeft, Printer, Lock, Eye, EyeOff, CheckSquare, Square,
   AlertCircle, CheckCircle, Clock, ChevronRight, FileText, Send,
-  UserCheck, UserPlus, Shield, Info, RotateCcw,
+  UserCheck, UserPlus, Shield, Info, RotateCcw, Download,
 } from 'lucide-react';
+import { savePdfToStorage } from '@/lib/pdf-storage';
 
 // ─── Konstanta warna ────────────────────────────────────────────────────────
 const SIFAT_KOTAK = ['segera', 'rahasia'] as const;
@@ -192,6 +193,7 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
 
   // Form: Kepala Dinas (Z6-Z9)
   const [selectedTujuan, setSelectedTujuan] = useState<string[]>([]);
@@ -249,6 +251,8 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
 
   const penugasan    = disposisi ? state.penugasan.filter(p => p.disposisiId === disposisi.id) : [];
   const tindakLanjut = disposisi ? state.tindakLanjut.filter(t => t.disposisiId === disposisi.id) : [];
+  const replies      = sm ? state.suratKeluar.filter(sk => sk.suratMasukAsalId === sm.id || sk.refSuratMasukId === sm.id) : [];
+  const [previewReply, setPreviewReply] = useState<any>(null);
   const riwayat      = sm
     ? state.riwayat.filter(r => r.suratMasukId === sm.id)
         .sort((a, b) => new Date(b.waktu).getTime() - new Date(a.waktu).getTime())
@@ -447,7 +451,7 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
     try {
       setErrorMsg('');
       apiTerimaDisposisi(id);
-      setSuccessMsg('Disposisi diterima dan diparaf oleh bidang Anda.');
+      setSuccessMsg('Paraf penerimaan berhasil dibubuhkan oleh bidang Anda.');
     } catch (e: any) { setErrorMsg(e.message); }
   };
 
@@ -471,10 +475,19 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
     if (!uraianHasil.trim()) { setErrorMsg('Uraian hasil wajib diisi.'); return; }
     setModal('tindak-langsung');
   };
-  const doTindakLangsung = () => {
+  const doTindakLangsung = async () => {
     setLoading(true);
     try {
       apiTindakLanjutLangsung(id, uraianHasil, fileBerkas, perluSuratJawaban === true);
+      if (fileBerkas) {
+        try {
+          await savePdfToStorage(`tl_${id}`, fileBerkas);
+          await savePdfToStorage(fileBerkas.name, fileBerkas);
+          await savePdfToStorage(`/docs/${fileBerkas.name}`, fileBerkas);
+        } catch (storageErr) {
+          console.warn('Gagal menyimpan berkas ke IndexedDB:', storageErr);
+        }
+      }
       setSuccessMsg('Tindak lanjut langsung berhasil. Disposisi selesai.');
       setModal(null);
     } catch (e: any) { setErrorMsg(e.message); }
@@ -486,10 +499,19 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
     if (!uraianHasil.trim()) { setErrorMsg('Uraian hasil laporan wajib diisi.'); return; }
     setModal('kirim-laporan');
   };
-  const doKirimLaporan = () => {
+  const doKirimLaporan = async () => {
     setLoading(true);
     try {
       apiLaporkanHasil(id, uraianHasil, fileBerkas);
+      if (fileBerkas) {
+        try {
+          await savePdfToStorage(`tl_${id}`, fileBerkas);
+          await savePdfToStorage(fileBerkas.name, fileBerkas);
+          await savePdfToStorage(`/docs/${fileBerkas.name}`, fileBerkas);
+        } catch (storageErr) {
+          console.warn('Gagal menyimpan berkas ke IndexedDB:', storageErr);
+        }
+      }
       setSuccessMsg('Laporan berhasil dikirim ke Kepala Bidang.');
       setModal(null);
     } catch (e: any) { setErrorMsg(e.message); }
@@ -767,6 +789,11 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
                   Sebagian selesai ({selesaiTujuan} dari {totalTujuan})
                 </span>
               )}
+              {replies.length > 0 && (
+                <span className="badge badge-success" style={{ fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <CheckCircle size={12} /> Sudah Dibalas ({replies.length}x)
+                </span>
+              )}
             </div>
             <h1 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Kartu Disposisi Digital</h1>
             <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4 }}>
@@ -782,6 +809,16 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
             >
               {showBadge ? <EyeOff size={15} /> : <Eye size={15} />}
               <span style={{ fontSize: 12 }}>{showBadge ? 'Sembunyikan' : 'Tampilkan'} penanda</span>
+            </button>
+            <button
+              id="btn-lihat-berkas-top"
+              className="btn btn-secondary btn-sm no-print"
+              onClick={() => setShowPdfPreview(true)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontWeight: 600 }}
+              title="Lihat pindaian berkas PDF asli surat masuk"
+            >
+              <FileText size={15} style={{ color: 'var(--pinus, #2A7356)' }} aria-hidden="true" />
+              <span>Lihat Berkas Surat (PDF)</span>
             </button>
             <button className="btn btn-secondary btn-sm no-print" onClick={() => window.print()}>
               <Printer size={15} /> Cetak
@@ -926,6 +963,21 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
                       <tr>
                         <td style={{ paddingRight: 4, whiteSpace: 'nowrap' }}>Tgl.Surat</td>
                         <td>: {dataSurat.tanggalSuratAsal ? fmtTgl(dataSurat.tanggalSuratAsal) : '—'}</td>
+                      </tr>
+                      <tr>
+                        <td style={{ paddingRight: 4, whiteSpace: 'nowrap' }}>Berkas Asli</td>
+                        <td>
+                          : <button
+                              type="button"
+                              className="btn btn-sm btn-ghost no-print"
+                              onClick={() => setShowPdfPreview(true)}
+                              style={{ padding: '2px 8px', fontSize: 11, color: 'var(--pinus, #2A7356)', textDecoration: 'underline', fontWeight: 600 }}
+                              title="Buka penampil berkas PDF surat masuk"
+                            >
+                              <FileText size={12} style={{ display: 'inline', marginRight: 4 }} />
+                              Pratinjau PDF
+                            </button>
+                        </td>
                       </tr>
                       {dataSurat.batasWaktuSurat && (
                         <tr>
@@ -1075,21 +1127,37 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
                   <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 12 }}>
                     Dengan hormat harap :
                   </div>
-                  {/* Tiga instruksi standar */}
-                  {(['tanggapan_saran', 'proses_lanjut', 'koordinasi_konfirmasi'] as JenisInstruksi[]).map(jenis => {
-                    const checked = izin.Z7 === 'isi'
-                      ? instruksiChecked(jenis)
-                      : (disposisi.instruksiList || [{ jenis: disposisi.instruksi }]).some(i => i.jenis === jenis);
-                    return (
-                      <CheckboxKertas
-                        key={jenis}
-                        checked={checked}
-                        label={JENIS_INSTRUKSI_LABELS[jenis]}
-                        disabled={izin.Z7 !== 'isi'}
-                        onChange={() => toggleInstruksi(jenis)}
-                      />
-                    );
-                  })}
+                  {/* Instruksi Disposisi dinamis dari Data Master (Tahap 6) */}
+                  {(() => {
+                    const currentSelected = disposisi.instruksiList || [{ jenis: disposisi.instruksi }];
+                    const masterItems = (state.dataMaster || [])
+                      .filter((d) => d.kategori === 'jenis_instruksi' && d.kode !== 'lainnya')
+                      .filter((d) => d.aktif || currentSelected.some((i) => i.jenis === d.kode))
+                      .sort((a, b) => (a.urutan ?? 99) - (b.urutan ?? 99));
+
+                    const listToRender = masterItems.length > 0
+                      ? masterItems.map((d) => ({ kode: d.kode, label: d.label }))
+                      : [
+                          { kode: 'tanggapan_saran', label: 'Tanggapan dan Saran' },
+                          { kode: 'proses_lanjut', label: 'Proses Lebih Lanjut' },
+                          { kode: 'koordinasi_konfirmasi', label: 'Koordinasi/Konfirmasi' },
+                        ];
+
+                    return listToRender.map((item) => {
+                      const checked = izin.Z7 === 'isi'
+                        ? instruksiChecked(item.kode as JenisInstruksi)
+                        : currentSelected.some((i) => i.jenis === item.kode);
+                      return (
+                        <CheckboxKertas
+                          key={item.kode}
+                          checked={checked}
+                          label={item.label}
+                          disabled={izin.Z7 !== 'isi'}
+                          onChange={() => toggleInstruksi(item.kode as JenisInstruksi)}
+                        />
+                      );
+                    });
+                  })()}
 
                   {/* Lainnya (titik-titik) */}
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 4 }}>
@@ -1289,20 +1357,20 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
               </div>
             )}
 
-            {/* ── Z12 Tanda Terima Bidang ── */}
+            {/* ── Z12 Tanda Terima Bidang (Paraf Penerimaan) ── */}
             {izin.Z12 !== 'sembunyi' && disposisi.bidangTujuan.length > 0 && (
               <div className="panel-lanjutan">
                 <div className="pl-header" style={{ background: '#fffbeb' }}>
                   <span style={{ color: '#B45309' }}>●</span>
-                  <span>Tanda Terima Bidang</span>
+                  <span>Paraf Penerimaan Bidang (Bukti Terima Disposisi)</span>
                 </div>
                 <div className="pl-body">
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, fontFamily: 'DM Sans, sans-serif' }}>
                     <thead>
                       <tr style={{ background: '#f9fafb', borderBottom: '1px solid var(--border-color)' }}>
-                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Bidang/Unit</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Status</th>
-                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Diterima oleh</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Bidang / Unit</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 600 }}>Status Terima</th>
+                        <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Paraf &amp; Nama Penerima</th>
                         <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600 }}>Waktu</th>
                         <th style={{ padding: '8px 12px' }} className="no-print" />
                       </tr>
@@ -1327,21 +1395,27 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
                               </td>
                               <td style={{ padding: '8px 12px', textAlign: 'center' }}>
                                 {bt.statusTerima === 'diterima' ? (
-                                  <span className="badge badge-success" style={{ fontSize: 11 }}>Diterima</span>
+                                  <span className="badge badge-success" style={{ fontSize: 11 }}>Diterima &amp; Diparaf</span>
                                 ) : (
                                   <span className="badge badge-warning" style={{ fontSize: 11 }}>Belum diterima</span>
                                 )}
                               </td>
                               <td style={{ padding: '8px 12px', fontSize: 12 }}>
-                                {statusItem?.diterimaOleh || bt.namaPenerimaSnapshot || '—'}
+                                {bt.parafPenerimaanSnapshot ? (
+                                  <span style={{ fontFamily: 'monospace', fontWeight: 600, color: '#15803d' }}>
+                                    ✓ {bt.parafPenerimaanSnapshot} ({bt.namaPenerimaSnapshot || statusItem?.diterimaOleh || '—'})
+                                  </span>
+                                ) : (
+                                  statusItem?.diterimaOleh || bt.namaPenerimaSnapshot || '—'
+                                )}
                               </td>
                               <td style={{ padding: '8px 12px', fontSize: 12 }}>
-                                {bt.waktuTerima ? fmtTglWaktu(bt.waktuTerima) : '—'}
+                                {bt.waktuParafPenerimaan ? fmtTglWaktu(bt.waktuParafPenerimaan) : bt.waktuTerima ? fmtTglWaktu(bt.waktuTerima) : '—'}
                               </td>
                               <td style={{ padding: '8px 12px' }} className="no-print">
                                 {isMine && bt.statusTerima !== 'diterima' && izin.Z12 === 'isi' && (
                                   <button className="btn btn-primary btn-sm" onClick={handleTerimaDisposisi}>
-                                    <UserCheck size={13} /> Terima & Paraf
+                                    <UserCheck size={13} /> Berikan Paraf Penerimaan
                                   </button>
                                 )}
                               </td>
@@ -1466,7 +1540,7 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
                     </div>
                   )}
 
-                  {/* Tombol susun konsep bila disposisi selesai dan perlu jawaban */}
+                  {/* Tombol susun konsep bila disposisi selesai dan perlu jawaban (Tahap 4) */}
                   {isKabid && (disposisi as any).perluSuratJawaban && disposisi.status === 'selesai' && (
                     <div style={{ marginTop: 16 }}>
                       <Link
@@ -1474,8 +1548,39 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
                         className="btn btn-primary btn-sm"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                       >
-                        <FileText size={14} aria-hidden="true" /> Susun Konsep Surat Jawaban →
+                        <FileText size={14} aria-hidden="true" />
+                        {replies.length > 0 ? `Susun Konsep Surat Jawaban Tambahan (${replies.length} sudah ada) →` : 'Susun Konsep Surat Jawaban →'}
                       </Link>
+                    </div>
+                  )}
+
+                  {/* Riwayat surat balasan yang sudah ada (Tahap 4) */}
+                  {replies.length > 0 && (
+                    <div style={{ marginTop: 14, padding: 12, background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 6, fontSize: 12 }}>
+                      <div style={{ fontWeight: 700, color: '#166534', marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span>Surat Keluar Balasan Terkait ({replies.length}x)</span>
+                        <Link href={`/surat-keluar/baru?disposisiId=${disposisi.id}&smId=${sm?.id}`} style={{ fontSize: 11, color: 'var(--pinus)' }}>
+                          + Balasan Tambahan
+                        </Link>
+                      </div>
+                      {replies.map((sk, idx) => (
+                        <div key={sk.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '4px 0', borderTop: idx > 0 ? '1px dashed #dcfce7' : 'none' }}>
+                          <span style={{ color: '#14532d' }}>
+                            <strong>#{idx + 1}</strong> {sk.nomorSurat || '(Konsep)'} — {sk.perihal}
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <ChipStatus jenis="suratKeluar" status={sk.status} compact />
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => setPreviewReply(sk)}
+                              style={{ fontSize: 11, padding: '2px 6px' }}
+                            >
+                              Pratinjau
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
 
@@ -1549,6 +1654,21 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
                   {/* Form laporan staf */}
                   {isStaf && myPenugasan && izin.Z14 === 'isi' && (
                     <>
+                      {/* Notifikasi riwayat laporan sebelumnya bila ada (Tahap 4) */}
+                      {tindakLanjut.length > 0 && (
+                        <div style={{
+                          background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 6,
+                          padding: 12, marginBottom: 14, fontSize: 13,
+                        }}>
+                          <div style={{ fontWeight: 600, color: '#166534', marginBottom: 4 }}>
+                            Informasi Riwayat: Terdapat {tindakLanjut.length} laporan tindak lanjut sebelumnya pada disposisi ini{tindakLanjut.some(t => t.status === 'dikembalikan') ? " dengan status 'Perlu Perbaikan'." : "."}
+                          </div>
+                          <div style={{ fontSize: 12, color: '#15803d' }}>
+                            Laporan baru ini akan menjadi <strong>Laporan Revisi/Tambahan (Revisi ke-{tindakLanjut.length + 1})</strong>.
+                          </div>
+                        </div>
+                      )}
+
                       {/* Area Progres (Tabel 27) */}
                       <div style={{ marginBottom: 16, padding: 16, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8 }}>
                         <h4 style={{ margin: '0 0 12px', fontSize: 14 }}>Perbarui Progres</h4>
@@ -1575,7 +1695,9 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
 
                       {/* Laporan Hasil (Tabel 28) */}
                       <div style={{ borderTop: '1px dashed #e2e8f0', paddingTop: 16 }}>
-                        <h4 style={{ margin: '0 0 12px', fontSize: 14 }}>Laporkan Hasil Tindak Lanjut</h4>
+                        <h4 style={{ margin: '0 0 12px', fontSize: 14 }}>
+                          Laporkan Hasil Tindak Lanjut {tindakLanjut.length > 0 && <span style={{ color: 'var(--primary-700)', fontSize: 12 }}>(Revisi ke-{tindakLanjut.length + 1})</span>}
+                        </h4>
                         <textarea
                           className="form-textarea"
                           rows={4}
@@ -1603,19 +1725,23 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
                     </>
                   )}
 
-                  {/* Laporan yang sudah ada */}
-                  {tindakLanjut.map(tl => {
+                  {/* Laporan yang sudah ada dengan badge versi revisi (Tahap 4) */}
+                  {tindakLanjut.map((tl, idx) => {
                     const pelaku = getUser(tl.pelakuId);
+                    const revNum = tl.nomorRevisi || idx + 1;
                     return (
                       <div key={tl.id} style={{
                         border: '1px solid var(--border-color)', borderRadius: 6,
                         padding: 12, marginTop: 12, fontSize: 13,
                       }}>
-                        <div style={{ fontWeight: 600, marginBottom: 4 }}>
-                          Laporan dari {pelaku?.nama}
+                        <div style={{ fontWeight: 600, marginBottom: 4, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+                          <span>Laporan dari {pelaku?.nama}</span>
+                          <span className="badge badge-info" style={{ fontSize: 10, fontWeight: 700 }}>
+                            {revNum === 1 ? 'Laporan Pertama' : `Revisi ke-${revNum}`}
+                          </span>
                           <span className={`badge ${tl.status === 'disetujui' ? 'badge-success' : tl.status === 'dikembalikan' ? 'badge-danger' : 'badge-info'}`}
-                            style={{ marginLeft: 8, fontSize: 10 }}>
-                            {tl.status}
+                            style={{ fontSize: 10 }}>
+                            {tl.status === 'dikembalikan' ? 'Perlu Perbaikan / Dikembalikan' : tl.status}
                           </span>
                         </div>
                         <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text-secondary)' }}>
@@ -1641,10 +1767,14 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
                     <>
                       {tindakLanjut.filter(t => t.status === 'dilaporkan').map(tl => {
                         const pelaku = getUser(tl.pelakuId);
+                        const revNum = tl.nomorRevisi || 1;
                         return (
                           <div key={tl.id} style={{ marginBottom: 16 }}>
-                            <div style={{ fontWeight: 600, marginBottom: 8 }}>
-                              Laporan dari {pelaku?.nama || '—'}
+                            <div style={{ fontWeight: 600, marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span>Laporan dari {pelaku?.nama || '—'}</span>
+                              <span className="badge badge-info" style={{ fontSize: 10, fontWeight: 700 }}>
+                                {revNum === 1 ? 'Laporan Pertama' : `Revisi ke-${revNum}`}
+                              </span>
                             </div>
                             <div style={{ background: '#f9fafb', borderRadius: 6, padding: 12, marginBottom: 10, fontSize: 13, whiteSpace: 'pre-wrap' }}>
                               {tl.uraianHasil}
@@ -1780,6 +1910,16 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
                   Pastikan tujuan disposisi memiliki wewenang yang sesuai.
                 </div>
               )}
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setShowPdfPreview(true)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                title="Tinjau berkas naskah dinas sebelum memberi instruksi"
+              >
+                <FileText size={15} aria-hidden="true" />
+                <span>Tinjau Berkas PDF</span>
+              </button>
               {!sudahParaf && (
                 <button className="btn btn-secondary" onClick={handleBubuhkanParaf}>
                   ✍ Bubuhkan Paraf
@@ -1818,6 +1958,84 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
             <Printer size={14} /> Cetak
           </button>
         </div>
+
+        {/* Modal Pratinjau Berkas PDF Surat Masuk */}
+        <ModalStandar
+          open={showPdfPreview}
+          onClose={() => setShowPdfPreview(false)}
+          judul={`Pratinjau Berkas Surat Masuk — Agenda: ${dataSurat.nomorAgenda || '—'}`}
+          size="lg"
+          footerSecondary={
+            <button className="btn btn-ghost" onClick={() => setShowPdfPreview(false)}>
+              Tutup Pratinjau
+            </button>
+          }
+          footerPrimary={
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                const link = document.createElement('a');
+                link.href = sm?.berkasUrl || '/docs/sample-surat-masuk.pdf';
+                link.download = `Surat_Masuk_${(dataSurat.nomorAgenda || 'berkas').replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }}
+            >
+              <Download size={14} aria-hidden="true" /> Unduh Berkas Asli
+            </button>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--latar, #F3F5F4)', padding: '10px 14px', borderRadius: 6, fontSize: 13 }}>
+              <div>
+                <strong>Asal Surat:</strong> {dataSurat.asalSurat} | <strong>Nomor:</strong> {dataSurat.nomorSuratAsal}
+              </div>
+              <span className={`chip ${dataSurat.sifat === 'rahasia' ? 'chip-bahaya' : 'chip-info'}`} style={{ fontSize: 11, fontWeight: 600, textTransform: 'capitalize' }}>
+                {dataSurat.sifat}
+              </span>
+            </div>
+
+            <PdfViewerEmbedded
+              fileUrl={sm?.berkasUrl || '/docs/sample-surat-masuk.pdf'}
+              judul={`Surat Masuk — ${dataSurat.nomorAgenda || 'Berkas Asli'}`}
+              metadata={{
+                nomor: dataSurat.nomorAgenda,
+                perihal: dataSurat.perihal,
+                asalSurat: dataSurat.asalSurat,
+                tanggal: dataSurat.tanggalTerima ? fmtTgl(dataSurat.tanggalTerima) : undefined,
+                sifat: dataSurat.sifat,
+                isiRingkas: `Surat dari ${dataSurat.asalSurat} dengan nomor surat ${dataSurat.nomorSuratAsal} tertanggal ${dataSurat.tanggalSuratAsal ? fmtTgl(dataSurat.tanggalSuratAsal) : '—'}.`,
+              }}
+              height={520}
+            />
+          </div>
+        </ModalStandar>
+
+        {/* Modal Pratinjau Surat Keluar Balasan (Tahap 4 & Tahap 1) */}
+        {previewReply && (
+          <ModalStandar
+            open={true}
+            onClose={() => setPreviewReply(null)}
+            judul={`Pratinjau Surat Keluar Balasan: ${previewReply.nomorSurat || previewReply.perihal}`}
+            size="lg"
+            footerSecondary={
+              <button className="btn btn-ghost" onClick={() => setPreviewReply(null)}>
+                Tutup Pratinjau
+              </button>
+            }
+          >
+            <div style={{ padding: '8px 0' }}>
+              <KonsepSuratPreview
+                surat={previewReply}
+                jenisSurat={state.jenisSurat.find(j => j.id === previewReply.jenisSuratId)}
+                klasifikasi={state.klasifikasi.find(k => k.id === previewReply.klasifikasiId)}
+                penyusun={state.users.find(usr => usr.id === previewReply.penyusunId)}
+                getUser={getUser}
+              />
+            </div>
+          </ModalStandar>
+        )}
 
       </div>
     </DashboardLayout>

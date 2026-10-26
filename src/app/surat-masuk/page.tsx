@@ -38,7 +38,17 @@ export default function SuratMasukPage() {
       const matchDari   = !filterDari   || tglTerima >= new Date(filterDari);
       const matchSampai = !filterSampai || tglTerima <= new Date(filterSampai + 'T23:59:59');
       return matchSearch && matchSifat && matchStatus && matchDari && matchSampai;
-    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }).sort((a, b) => {
+      // Prioritas sifat surat (Bab 1 Poin 6): segera > penting > lainnya
+      const rank = (s: string) => {
+        if (s === 'segera') return 0;
+        if (s === 'penting') return 1;
+        return 2;
+      };
+      const rankDiff = rank(a.sifat) - rank(b.sifat);
+      if (rankDiff !== 0) return rankDiff;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
   }, [rawList, search, filterSifat, filterStatus, filterDari, filterSampai]);
 
   const hasFilter = filterSifat !== 'all' || filterStatus !== 'all' || filterDari || filterSampai || search;

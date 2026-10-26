@@ -7,12 +7,12 @@ import { useStore } from '@/lib/store';
 import { useBusinessLogic } from '@/lib/api';
 import { STATUS_SURAT_KELUAR_LABELS, SIFAT_SURAT_LABELS } from '@/lib/types';
 import { hasPermission } from '@/lib/rbac';
-import { ChipStatus } from '@/components/ui';
-import { ModalStandar } from '@/components/ui';
+import { ChipStatus, ModalStandar, KonsepSuratPreview, PdfViewerEmbedded } from '@/components/ui';
 import {
   ArrowLeft, CheckCircle2, FileText, Send, AlertCircle, Upload, X, Eye,
-  Hash, Stamp, Truck, Archive, Info, Lock, ExternalLink, PenTool
+  Hash, Stamp, Truck, Archive, Info, Lock, ExternalLink, PenTool, Download
 } from 'lucide-react';
+import { savePdfToStorage } from '@/lib/pdf-storage';
 
 
 const STEPS = [
@@ -87,6 +87,7 @@ export default function SuratKeluarDetailPage({ params }: { params: Promise<{ id
   const [showModalTolak, setModalTolak]     = useState(false);
   const [showModalTtd, setModalTtd]         = useState(false);
   const [isBusy, setIsBusy]                 = useState(false);
+  const [showModalPreviewFinal, setShowModalPreviewFinal] = useState(false);
 
   // ── Handler PDF ─────────────────────────────────────────────
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -106,6 +107,8 @@ export default function SuratKeluarDetailPage({ params }: { params: Promise<{ id
     setFileFinal(f);
     setPdfUrl(URL.createObjectURL(f));
   }, []);
+
+
 
   if (!surat) {
     return (
@@ -146,11 +149,24 @@ export default function SuratKeluarDetailPage({ params }: { params: Promise<{ id
   };
 
   // ── Handler: Tandai Terkirim ─────────────────────────────────
-  const handleKirim = () => {
+  const handleKirim = async () => {
     setErrorMsg('');
     setIsBusy(true);
     try {
-      apiDokumentasikanDanKirimSuratKeluar(surat.id, tanggalKirim, fileFinal);
+      apiDokumentasikanDanKirimSuratKeluar(
+        surat.id,
+        tanggalKirim,
+        fileFinal
+      );
+      if (fileFinal) {
+        try {
+          await savePdfToStorage(`sk_${surat.id}`, fileFinal);
+          await savePdfToStorage(fileFinal.name, fileFinal);
+          await savePdfToStorage(`/docs/${fileFinal.name}`, fileFinal);
+        } catch (storageErr) {
+          console.warn('Gagal menyimpan PDF ke IndexedDB:', storageErr);
+        }
+      }
       setKonfirmasi(false);
     } catch (e: any) { setErrorMsg(e.message); }
     finally { setIsBusy(false); }
@@ -220,11 +236,50 @@ export default function SuratKeluarDetailPage({ params }: { params: Promise<{ id
 
         {/* ── Error ────────────────────────────────────────── */}
         {errorMsg && (
-          <div className="modal-error" role="alert" style={{ marginBottom: 16 }}>
-            <AlertCircle size={15} aria-hidden="true" /> {errorMsg}
+          <div className="modal-error" role="alert" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AlertCircle size={15} aria-hidden="true" />
+              <span>{errorMsg}</span>
+            </div>
+            {errorMsg.includes('belum mengunggah tanda tangan') && (
+              <Link href="/profil" className="btn btn-sm btn-primary" style={{ marginLeft: 8, padding: '2px 10px', fontSize: 12 }}>
+                Buka Halaman Profil
+              </Link>
+            )}
             <button style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'inherit' }} onClick={() => setErrorMsg('')}>✕</button>
           </div>
         )}
+
+        {/* ── Pratinjau Naskah Dinas Resmi (Konsep / Final) ───── */}
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+            <h2 style={{ fontSize: 14, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FileText size={16} style={{ color: 'var(--pinus)' }} aria-hidden="true" />
+              Pratinjau Format Naskah Dinas {sudahKirim ? 'Final' : 'Konsep Resmi'}
+            </h2>
+            {(surat.berkasUrl || pdfUrl || sudahKirim) && (
+              <button
+                type="button"
+                className="btn btn-sm btn-secondary"
+                onClick={() => setShowModalPreviewFinal(true)}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <Eye size={14} aria-hidden="true" />
+                <span>Lihat Berkas Final (PDF)</span>
+              </button>
+            )}
+          </div>
+          <div className="card-body" style={{ padding: 0 }}>
+            <KonsepSuratPreview
+              surat={surat}
+              jenisSurat={jenis}
+              klasifikasi={klasifikasi}
+              penyusun={penyusun}
+              persetujuanList={persetujuan}
+              getUser={getUser}
+            />
+          </div>
+        </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
 
@@ -459,7 +514,8 @@ export default function SuratKeluarDetailPage({ params }: { params: Promise<{ id
                     <div className="sk-proses-num">3</div>
                     <div className="sk-proses-body">
                       <div className="sk-proses-judul">Isi Data Pengiriman</div>
-                      <div className="form-row" style={{ marginTop: 10 }}>
+
+                      <div className="form-row" style={{ marginTop: 6 }}>
                         <div className="form-group">
                           <label className="form-label" htmlFor="tujuan-alamat">Alamat Tujuan</label>
                           <input id="tujuan-alamat" className="form-input" value={tujuanAlamat} onChange={(e) => setTujuanAlamat(e.target.value)} placeholder="Nama instansi dan alamat pengiriman" disabled={!sudahNomor} />
@@ -497,7 +553,14 @@ export default function SuratKeluarDetailPage({ params }: { params: Promise<{ id
                         <div className="unggah-pdf-filled">
                           <FileText size={16} aria-hidden="true" />
                           <span className="unggah-pdf-name">{fileFinal?.name}</span>
-                          <a href={pdfUrl} target="_blank" rel="noopener noreferrer" className="btn btn-sm btn-ghost" title="Pratinjau"><Eye size={14} /></a>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-ghost"
+                            onClick={() => setShowModalPreviewFinal(true)}
+                            title="Pratinjau Berkas PDF Final"
+                          >
+                            <Eye size={14} />
+                          </button>
                           <button type="button" className="btn btn-sm btn-ghost" onClick={hapusPdf} title="Hapus berkas"><X size={14} /></button>
                         </div>
                       )}
@@ -657,6 +720,60 @@ export default function SuratKeluarDetailPage({ params }: { params: Promise<{ id
             Surat keluar "{surat.perihal}" akan ditandai terkirim dan arsip digital dibuat otomatis. Tindakan ini tidak dapat dibatalkan.
           </p>
         </ModalStandar>
+
+        {/* ─── Modal Pratinjau Berkas PDF Final Surat Keluar ─────── */}
+        <ModalStandar
+          open={showModalPreviewFinal}
+          onClose={() => setShowModalPreviewFinal(false)}
+          judul={`Pratinjau Berkas Final Surat Keluar — Nomor: ${surat.nomorSurat || 'Belum Bernomor'}`}
+          size="lg"
+          footerSecondary={
+            <button className="btn btn-ghost" onClick={() => setShowModalPreviewFinal(false)}>
+              Tutup Pratinjau
+            </button>
+          }
+          footerPrimary={
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                const link = document.createElement('a');
+                link.href = pdfUrl || surat.berkasUrl || '/docs/sample-surat-keluar.pdf';
+                link.download = `Surat_Keluar_${(surat.nomorSurat || 'final').replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }}
+            >
+              <Download size={14} aria-hidden="true" /> Unduh Berkas Final
+            </button>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--latar, #F3F5F4)', padding: '10px 14px', borderRadius: 6, fontSize: 13 }}>
+              <div>
+                <strong>Tujuan:</strong> {surat.tujuan} | <strong>Nomor:</strong> {surat.nomorSurat || 'Belum terbit'}
+              </div>
+              <span className="chip chip-sukses" style={{ fontSize: 11, fontWeight: 600 }}>
+                Berkas Final Terunggah
+              </span>
+            </div>
+
+            <PdfViewerEmbedded
+              fileUrl={pdfUrl || surat.berkasUrl || '/docs/sample-surat-keluar.pdf'}
+              judul={`Surat Keluar — ${surat.nomorSurat || 'Berkas Final'}`}
+              metadata={{
+                nomor: surat.nomorSurat || undefined,
+                perihal: surat.perihal,
+                tujuan: surat.tujuan,
+                tanggal: surat.tanggalKirim || (surat.createdAt ? new Date(surat.createdAt).toLocaleDateString('id-ID') : undefined),
+                isiRingkas: surat.isiRingkas,
+              }}
+              height={520}
+            />
+          </div>
+        </ModalStandar>
+
+
       </div>
     </DashboardLayout>
   );

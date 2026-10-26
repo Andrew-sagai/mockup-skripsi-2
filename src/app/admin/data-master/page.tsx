@@ -3,11 +3,12 @@ import React, { useState } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useStore } from '@/lib/store';
 import { useBusinessLogic } from '@/lib/api';
-import { KlasifikasiSurat } from '@/lib/types';
+import { KlasifikasiSurat, KategoriDataMaster, DataMasterItem } from '@/lib/types';
 import { KonfirmasiDialog } from '@/components/ui';
 import {
   Plus, Building2, FolderTree, Hash,
-  CheckCircle2, AlertCircle, Edit3, Power, Trash2
+  CheckCircle2, AlertCircle, Edit3, Power, Trash2,
+  Tag, ListChecks, Landmark
 } from 'lucide-react';
 
 // ─── Format contoh nomor surat keluar ─────────────────────────────────────
@@ -17,11 +18,49 @@ function contohNomor(kodeKlas: string): string {
   return `${kodeKlas}/123/DISTAN-MS/${bulanRomawi}/${now.getFullYear()}`;
 }
 
+type TabKey = 'unit' | 'klasifikasi' | 'penomoran' | 'sifat' | 'instruksi' | 'instansi';
+
+const TAB_KATEGORI_MAP: Record<string, KategoriDataMaster> = {
+  sifat: 'sifat_surat',
+  instruksi: 'jenis_instruksi',
+  instansi: 'instansi_asal',
+};
+
+const TAB_METADATA: Record<string, { label: string; singular: string; placeholderKode: string; placeholderLabel: string; desc: string }> = {
+  sifat: {
+    label: 'Sifat Surat',
+    singular: 'Sifat Surat',
+    placeholderKode: 'penting, segera, rahasia, sangat_rahasia',
+    placeholderLabel: 'Biasa, Penting, Segera, Rahasia, Sangat Rahasia',
+    desc: 'Kelola kategori sifat/derajat urgensi surat dinas. Opsi aktif akan tampil otomatis pada formulir persuratan.',
+  },
+  instruksi: {
+    label: 'Instruksi Disposisi',
+    singular: 'Jenis Instruksi',
+    placeholderKode: 'tanggapan_saran, proses_lanjut, koordinasi_konfirmasi',
+    placeholderLabel: 'Tanggapan dan Saran, Koordinasi/Konfirmasi, Selesaikan Segera',
+    desc: 'Kelola daftar instruksi arahan pimpinan pada Lembar Disposisi Digital.',
+  },
+  instansi: {
+    label: 'Instansi Pengirim',
+    singular: 'Instansi Pengirim',
+    placeholderKode: 'dprd_minsel, bupati_minsel, distan_prov',
+    placeholderLabel: 'DPRD Minahasa Selatan, Kantor Bupati Minahasa Selatan',
+    desc: 'Daftar instansi/mitra pengirim surat yang sering berulang, sebagai rekomendasi autocomplete saat pencatatan surat.',
+  },
+};
+
 export default function DataMasterPage() {
   const { state, dispatch, generateId, addLog } = useStore();
-  const { apiHapusUnitKerja, apiToggleUnitKerja } = useBusinessLogic();
+  const {
+    apiHapusUnitKerja,
+    apiToggleUnitKerja,
+    apiTambahDataMaster,
+    apiUbahDataMaster,
+    apiToggleDataMaster
+  } = useBusinessLogic();
 
-  const [tab, setTab] = useState<'unit' | 'klasifikasi' | 'penomoran'>('unit');
+  const [tab, setTab] = useState<TabKey>('unit');
 
   // --- State modal Unit Kerja ---
   const [showUnitModal, setShowUnitModal]   = useState(false);
@@ -37,6 +76,12 @@ export default function DataMasterPage() {
   const [editKlasId, setEditKlasId]         = useState<string | null>(null);
   const [formKlas, setFormKlas]             = useState({ kode: '', nama: '', unitKerjaId: '' });
   const [klasError, setKlasError]           = useState('');
+
+  // --- State modal Data Master Generik (Tahap 6) ---
+  const [showDmModal, setShowDmModal]       = useState(false);
+  const [editDmId, setEditDmId]             = useState<string | null>(null);
+  const [formDm, setFormDm]                 = useState({ kode: '', label: '', keterangan: '', urutan: 1 });
+  const [dmError, setDmError]               = useState('');
 
   const isAdmin = state.currentUser?.role === 'admin';
 
@@ -133,6 +178,71 @@ export default function DataMasterPage() {
   };
 
   // ──────────────────────────────────────────────────────────────
+  // Handler: Data Master Generik (Tahap 6)
+  // ──────────────────────────────────────────────────────────────
+  const openAddDm = (t: string) => {
+    const currentCategory = TAB_KATEGORI_MAP[t];
+    const itemsInCat = (state.dataMaster || []).filter((d) => d.kategori === currentCategory);
+    setEditDmId(null);
+    setFormDm({
+      kode: '',
+      label: '',
+      keterangan: '',
+      urutan: itemsInCat.length + 1,
+    });
+    setDmError('');
+    setShowDmModal(true);
+  };
+
+  const openEditDm = (item: DataMasterItem) => {
+    setEditDmId(item.id);
+    setFormDm({
+      kode: item.kode,
+      label: item.label,
+      keterangan: item.keterangan || '',
+      urutan: item.urutan ?? 1,
+    });
+    setDmError('');
+    setShowDmModal(true);
+  };
+
+  const handleSaveDm = () => {
+    const currentCategory = TAB_KATEGORI_MAP[tab];
+    if (!currentCategory) return;
+    setDmError('');
+    try {
+      if (editDmId) {
+        apiUbahDataMaster(editDmId, {
+          kode: formDm.kode.trim(),
+          label: formDm.label.trim(),
+          keterangan: formDm.keterangan.trim(),
+          urutan: Number(formDm.urutan) || 1,
+        });
+      } else {
+        apiTambahDataMaster(
+          currentCategory,
+          formDm.kode.trim(),
+          formDm.label.trim(),
+          formDm.keterangan.trim(),
+          Number(formDm.urutan) || 1
+        );
+      }
+      setShowDmModal(false);
+      setEditDmId(null);
+    } catch (err: any) {
+      setDmError(err.message || 'Gagal menyimpan data master.');
+    }
+  };
+
+  const handleToggleDm = (id: string) => {
+    try {
+      apiToggleDataMaster(id);
+    } catch (err: any) {
+      alert(err.message || 'Gagal mengubah status data master.');
+    }
+  };
+
+  // ──────────────────────────────────────────────────────────────
   // Render
   // ──────────────────────────────────────────────────────────────
   return (
@@ -141,7 +251,7 @@ export default function DataMasterPage() {
         <div className="page-header">
           <div className="page-header-left">
             <h1>Data Master Persuratan</h1>
-            <p>Kelola unit kerja, kode klasifikasi arsip, dan format penomoran surat</p>
+            <p>Kelola unit kerja, kode klasifikasi arsip, sifat surat, jenis instruksi disposisi, dan instansi pengirim</p>
           </div>
           {isAdmin && (
             <button
@@ -150,17 +260,18 @@ export default function DataMasterPage() {
               onClick={() => {
                 if (tab === 'unit') openAddUnit();
                 else if (tab === 'klasifikasi') openAddKlas();
+                else if (TAB_KATEGORI_MAP[tab]) openAddDm(tab);
               }}
               style={{ display: tab === 'penomoran' ? 'none' : undefined }}
             >
               <Plus size={16} aria-hidden="true" />
-              Tambah {tab === 'unit' ? 'Unit Kerja' : 'Kode Klasifikasi'}
+              Tambah {tab === 'unit' ? 'Unit Kerja' : tab === 'klasifikasi' ? 'Kode Klasifikasi' : TAB_METADATA[tab]?.singular || 'Data Master'}
             </button>
           )}
         </div>
 
         {/* Tab Navigation */}
-        <div className="tabs" style={{ marginBottom: 20 }}>
+        <div className="tabs" style={{ marginBottom: 20, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
           <button id="tab-unit" className={`tab ${tab === 'unit' ? 'active' : ''}`} onClick={() => setTab('unit')}>
             <Building2 size={14} aria-hidden="true" style={{ display: 'inline', marginRight: 6 }} />
             Unit Kerja
@@ -172,6 +283,18 @@ export default function DataMasterPage() {
           <button id="tab-penomoran" className={`tab ${tab === 'penomoran' ? 'active' : ''}`} onClick={() => setTab('penomoran')}>
             <Hash size={14} aria-hidden="true" style={{ display: 'inline', marginRight: 6 }} />
             Kode Penomoran
+          </button>
+          <button id="tab-sifat" className={`tab ${tab === 'sifat' ? 'active' : ''}`} onClick={() => setTab('sifat')}>
+            <Tag size={14} aria-hidden="true" style={{ display: 'inline', marginRight: 6 }} />
+            Sifat Surat
+          </button>
+          <button id="tab-instruksi" className={`tab ${tab === 'instruksi' ? 'active' : ''}`} onClick={() => setTab('instruksi')}>
+            <ListChecks size={14} aria-hidden="true" style={{ display: 'inline', marginRight: 6 }} />
+            Instruksi Disposisi
+          </button>
+          <button id="tab-instansi" className={`tab ${tab === 'instansi' ? 'active' : ''}`} onClick={() => setTab('instansi')}>
+            <Landmark size={14} aria-hidden="true" style={{ display: 'inline', marginRight: 6 }} />
+            Instansi Pengirim
           </button>
         </div>
 
@@ -352,6 +475,113 @@ export default function DataMasterPage() {
           </div>
         )}
 
+        {/* ─── TAB GENERIK DATA MASTER (Sifat, Instruksi, Instansi, Metode) ─── */}
+        {TAB_KATEGORI_MAP[tab] && (
+          <div>
+            <div
+              style={{
+                marginBottom: 16,
+                padding: '14px 18px',
+                background: 'var(--latar-kartu-alt, rgba(0,0,0,0.02))',
+                borderRadius: 8,
+                border: '1px solid var(--garis)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: 12,
+              }}
+            >
+              <div>
+                <strong style={{ fontSize: 14, display: 'block', color: 'var(--tinta)' }}>
+                  {TAB_METADATA[tab]?.label}
+                </strong>
+                <span style={{ fontSize: 12, color: 'var(--tinta-redup)' }}>
+                  {TAB_METADATA[tab]?.desc}
+                </span>
+              </div>
+              <span className="chip chip-info" style={{ fontSize: 12, fontWeight: 600 }}>
+                {(state.dataMaster || []).filter((d) => d.kategori === TAB_KATEGORI_MAP[tab]).length} item terdaftar
+              </span>
+            </div>
+
+            <div className="table-container">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 70, textAlign: 'center' }}>Urutan</th>
+                    <th style={{ width: 180 }}>Kode (Unik)</th>
+                    <th>Nama / Label Tampilan</th>
+                    <th>Keterangan / Informasi</th>
+                    <th style={{ width: 110 }}>Status</th>
+                    {isAdmin && <th style={{ width: 110, textAlign: 'center' }}>Aksi</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(state.dataMaster || [])
+                    .filter((d) => d.kategori === TAB_KATEGORI_MAP[tab])
+                    .sort((a, b) => (a.urutan ?? 99) - (b.urutan ?? 99))
+                    .map((item) => (
+                      <tr key={item.id} style={{ opacity: item.aktif ? 1 : 0.65 }}>
+                        <td style={{ textAlign: 'center', fontWeight: 600, color: 'var(--tinta-redup)' }}>
+                          {item.urutan ?? '-'}
+                        </td>
+                        <td>
+                          <code style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--pinus)' }}>
+                            {item.kode}
+                          </code>
+                        </td>
+                        <td style={{ fontWeight: 600 }}>
+                          {item.label}
+                        </td>
+                        <td style={{ fontSize: 13, color: 'var(--tinta-redup)' }}>
+                          {item.keterangan || <span style={{ fontStyle: 'italic', opacity: 0.6 }}>-</span>}
+                        </td>
+                        <td>
+                          <span className={`chip ${item.aktif ? 'chip-sukses' : 'chip-netral'}`} style={{ fontSize: 11 }}>
+                            {item.aktif ? 'Aktif' : 'Nonaktif'}
+                          </span>
+                        </td>
+                        {isAdmin && (
+                          <td>
+                            <div className="table-actions" style={{ justifyContent: 'center' }}>
+                              <button
+                                className="btn btn-sm btn-ghost"
+                                title="Ubah Item"
+                                onClick={() => openEditDm(item)}
+                              >
+                                <Edit3 size={14} />
+                              </button>
+                              <button
+                                className="btn btn-sm btn-ghost"
+                                title={item.aktif ? 'Nonaktifkan Item (Aman untuk data historis)' : 'Aktifkan Kembali Item'}
+                                onClick={() => handleToggleDm(item.id)}
+                                style={{ color: item.aktif ? 'var(--segera, #f59e0b)' : 'var(--sukses, #10b981)' }}
+                              >
+                                <Power size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  {(state.dataMaster || []).filter((d) => d.kategori === TAB_KATEGORI_MAP[tab]).length === 0 && (
+                    <tr>
+                      <td colSpan={isAdmin ? 6 : 5} style={{ textAlign: 'center', padding: '36px 16px', color: 'var(--tinta-redup)' }}>
+                        Belum ada data untuk kategori ini. Klik tombol &quot;Tambah {TAB_METADATA[tab]?.singular}&quot; untuk menambahkan item baru.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <p className="form-hint" style={{ marginTop: 14 }}>
+              💡 <strong>Integritas Data:</strong> Data master tidak dihapus permanen melainkan dinonaktifkan. Data lama pada surat/disposisi historis tetap aman dan mempertahankan label aslinya.
+            </p>
+          </div>
+        )}
+
         {/* ── Modal Tambah/Ubah Unit Kerja ─────────────────── */}
         {showUnitModal && (
           <div className="modal-overlay" onClick={() => setShowUnitModal(false)}>
@@ -434,6 +664,83 @@ export default function DataMasterPage() {
               <div className="modal-footer">
                 <button className="btn btn-ghost" onClick={() => setShowKlasModal(false)}>Batal</button>
                 <button id="btn-simpan-klas" className="btn btn-primary" onClick={handleSaveKlas}>
+                  <CheckCircle2 size={15} aria-hidden="true" /> Simpan
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Modal Tambah/Ubah Data Master Generik (Tahap 6) ─ */}
+        {showDmModal && TAB_KATEGORI_MAP[tab] && (
+          <div className="modal-overlay" onClick={() => setShowDmModal(false)}>
+            <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 520 }}>
+              <div className="modal-header">
+                <h2>{editDmId ? `Ubah ${TAB_METADATA[tab]?.singular}` : `Tambah ${TAB_METADATA[tab]?.singular}`}</h2>
+                <button className="modal-close" onClick={() => setShowDmModal(false)} aria-label="Tutup">✕</button>
+              </div>
+              <div className="modal-body">
+                {dmError && (
+                  <div className="modal-error" role="alert"><AlertCircle size={15} aria-hidden="true" /> {dmError}</div>
+                )}
+                <div className="form-group">
+                  <label className="form-label" htmlFor="dm-kode">
+                    Kode Sistem <span className="required">*</span>
+                  </label>
+                  <input
+                    id="dm-kode"
+                    className="form-input"
+                    value={formDm.kode}
+                    onChange={(e) => setFormDm({ ...formDm, kode: e.target.value })}
+                    placeholder={`Contoh: ${TAB_METADATA[tab]?.placeholderKode}`}
+                  />
+                  <p className="form-hint">Kode harus unik dalam kategori ini, huruf kecil dan garis bawah (snake_case/kebab-case).</p>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="dm-label">
+                    Nama / Label Tampilan <span className="required">*</span>
+                  </label>
+                  <input
+                    id="dm-label"
+                    className="form-input"
+                    value={formDm.label}
+                    onChange={(e) => setFormDm({ ...formDm, label: e.target.value })}
+                    placeholder={`Contoh: ${TAB_METADATA[tab]?.placeholderLabel}`}
+                  />
+                  <p className="form-hint">Teks yang ditampilkan kepada pengguna pada formulir atau lembar persuratan.</p>
+                </div>
+                <div className="form-row">
+                  <div className="form-group" style={{ flex: 1 }}>
+                    <label className="form-label" htmlFor="dm-urutan">
+                      Nomor Urut Tampilan
+                    </label>
+                    <input
+                      id="dm-urutan"
+                      type="number"
+                      min={1}
+                      className="form-input"
+                      value={formDm.urutan}
+                      onChange={(e) => setFormDm({ ...formDm, urutan: parseInt(e.target.value) || 1 })}
+                    />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="dm-keterangan">
+                    Keterangan / Panduan Perlakuan (opsional)
+                  </label>
+                  <textarea
+                    id="dm-keterangan"
+                    className="form-input"
+                    rows={2}
+                    value={formDm.keterangan}
+                    onChange={(e) => setFormDm({ ...formDm, keterangan: e.target.value })}
+                    placeholder="Contoh: Perlakuan khusus dokumen, batas waktu respon, dsb."
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button className="btn btn-ghost" onClick={() => setShowDmModal(false)}>Batal</button>
+                <button id="btn-simpan-dm" className="btn btn-primary" onClick={handleSaveDm}>
                   <CheckCircle2 size={15} aria-hidden="true" /> Simpan
                 </button>
               </div>

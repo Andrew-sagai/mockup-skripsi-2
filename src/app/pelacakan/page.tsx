@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useStore } from '@/lib/store';
 import { Search, MapPin, ChevronRight, FileText, Filter, X } from 'lucide-react';
-import { ChipStatus } from '@/components/ui';
+import { ChipStatus, ModalStandar, PdfViewerEmbedded } from '@/components/ui';
 
 export default function PelacakanPage() {
   const { state, getUser, getScopedSuratMasuk } = useStore();
@@ -13,6 +13,7 @@ export default function PelacakanPage() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<'masuk' | 'keluar' | null>(null);
+  const [showPreviewBerkas, setShowPreviewBerkas] = useState(false);
 
   // Tahap 10/11: Bangun daftar gabungan surat masuk + keluar sesuai RBAC
   const allItems = useMemo(() => {
@@ -69,17 +70,20 @@ export default function PelacakanPage() {
         .filter(r => r.suratMasukId === sm.id)
         .sort((a, b) => new Date(a.waktu).getTime() - new Date(b.waktu).getTime());
       const disp = state.disposisi.find(d => d.suratMasukId === sm.id);
-      const sk = state.suratKeluar.find(k => k.suratMasukAsalId === sm.id);
+      const skList = state.suratKeluar.filter(k => k.suratMasukAsalId === sm.id || k.refSuratMasukId === sm.id);
       return {
+        id: sm.id,
         type: 'Surat Masuk' as const,
         perihal: sm.perihal,
         nomor: sm.nomorAgenda,
         status: sm.status,
         sifat: sm.sifat,
+        berkasUrl: sm.berkasUrl,
         riwayat,
         statusPerBidang: disp?.statusPerBidang,
-        suratKeluarId: sk?.id,
-        suratKeluarNomor: sk?.nomorSurat,
+        suratKeluarList: skList,
+        suratKeluarId: skList[0]?.id,
+        suratKeluarNomor: skList[0]?.nomorSurat,
       };
     } else {
       const sk = state.suratKeluar.find(s => s.id === selectedId);
@@ -88,10 +92,12 @@ export default function PelacakanPage() {
         .filter(r => r.suratKeluarId === sk.id)
         .sort((a, b) => new Date(a.waktu).getTime() - new Date(b.waktu).getTime());
       return {
+        id: sk.id,
         type: 'Surat Keluar' as const,
         perihal: sk.perihal,
         nomor: sk.nomorSurat || 'Belum bernomor',
         status: sk.status,
+        berkasUrl: sk.berkasUrl,
         riwayat,
         suratMasukId: sk.suratMasukAsalId,
       };
@@ -240,13 +246,22 @@ export default function PelacakanPage() {
                 </div>
 
                 {/* Tautan dua arah */}
-                {'suratKeluarId' in detailData && detailData.suratKeluarId && (
+                {'suratKeluarList' in detailData && detailData.suratKeluarList && (detailData.suratKeluarList as any[]).length > 0 && (
                   <div style={{ marginTop: 8, fontSize: 13 }}>
-                    <span style={{ color: 'var(--text-muted)' }}>Dibalas dengan: </span>
-                    <a style={{ color: 'var(--primary-600)', textDecoration: 'underline', cursor: 'pointer' }}
-                      onClick={() => { setSelectedId(detailData.suratKeluarId!); setSelectedType('keluar'); }}>
-                      Lihat Surat Jawaban
-                    </a>
+                    <span style={{ color: 'var(--text-muted)' }}>Dibalas dengan ({(detailData.suratKeluarList as any[]).length}x): </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+                      {(detailData.suratKeluarList as any[]).map((sk: any, idx: number) => (
+                        <div key={sk.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>#{idx + 1}</span>
+                          <a
+                            style={{ color: 'var(--primary-600)', textDecoration: 'underline', cursor: 'pointer', fontWeight: 500 }}
+                            onClick={() => { setSelectedId(sk.id); setSelectedType('keluar'); }}
+                          >
+                            {sk.nomorSurat || '(Konsep belum terbit)'} — {sk.perihal}
+                          </a>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
                 {'suratMasukId' in detailData && detailData.suratMasukId && (
@@ -258,6 +273,19 @@ export default function PelacakanPage() {
                     </a>
                   </div>
                 )}
+
+                {/* Tombol preview berkas PDF (Gambar 23 / Bab 4) */}
+                <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => setShowPreviewBerkas(true)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, minHeight: 38 }}
+                  >
+                    <FileText size={15} />
+                    Lihat Berkas (PDF)
+                  </button>
+                </div>
               </div>
               <div className="card-body" style={{ maxHeight: 500, overflowY: 'auto' }}>
                 {/* Status per bidang (surat masuk dengan disposisi) */}
@@ -311,6 +339,31 @@ export default function PelacakanPage() {
             </div>
           )}
         </div>
+
+        {/* Modal Embedded PDF Viewer (Gambar 23 / Subbab 4.8) */}
+        {showPreviewBerkas && detailData && (
+          <ModalStandar
+            open={showPreviewBerkas}
+            onClose={() => setShowPreviewBerkas(false)}
+            judul={`Berkas ${detailData.type}: ${detailData.nomor}`}
+            size="lg"
+          >
+            <PdfViewerEmbedded
+              fileUrl={
+                detailData.berkasUrl ||
+                (detailData.type === 'Surat Masuk'
+                  ? '/docs/sample-surat-masuk.pdf'
+                  : '/docs/sample-surat-keluar.pdf')
+              }
+              judul={`${detailData.type}: ${detailData.perihal}`}
+              metadata={{
+                nomor: detailData.nomor,
+                perihal: detailData.perihal,
+                sifat: 'sifat' in detailData ? detailData.sifat : undefined,
+              }}
+            />
+          </ModalStandar>
+        )}
       </div>
     </DashboardLayout>
   );

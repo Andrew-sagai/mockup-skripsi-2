@@ -3,14 +3,22 @@ import React, { useState } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useStore } from '@/lib/store';
 import { useBusinessLogic } from '@/lib/api';
-import { USER_ROLE_LABELS, UserRole } from '@/lib/types';
-import { urutkanTerbaru } from '@/lib/utils';
-import { KonfirmasiDialog } from '@/components/ui';
-import { Plus, UserX, UserCheck, Search, Key, Edit3, AlertCircle, CheckCircle2, Mail } from 'lucide-react';
+import { USER_ROLE_LABELS, UserRole, User } from '@/lib/types';
+import { KonfirmasiDialog, ModalStandar } from '@/components/ui';
+import { Plus, UserX, UserCheck, Search, Key, Edit3, AlertCircle, CheckCircle2, Mail, FilePen, Eye, Trash2, Upload } from 'lucide-react';
 
 export default function PenggunaPage() {
   const { state } = useStore();
-  const { apiTambahPengguna, apiUbahPengguna, apiTogglePengguna } = useBusinessLogic();
+  const {
+    apiTambahPengguna,
+    apiUbahPengguna,
+    apiTogglePengguna,
+    apiUploadTandaTangan,
+    apiHapusTandaTangan,
+  } = useBusinessLogic();
+
+  const [signatureModalUser, setSignatureModalUser] = useState<User | null>(null);
+  const [signatureUploadDataUrl, setSignatureUploadDataUrl] = useState<string | null>(null);
 
   const [search, setSearch]         = useState('');
   const [filterRole, setFilterRole] = useState('all');
@@ -40,16 +48,13 @@ export default function PenggunaPage() {
   const sekretariatUnit = state.unitKerja.find((u) => u.jenis === 'sekretariat');
   const bidangAktif     = state.unitKerja.filter((u) => u.jenis === 'bidang' && u.aktif);
 
-  const filtered = urutkanTerbaru(
-    state.users.filter((u) => {
-      const q = search.toLowerCase();
-      const matchSearch = !q || u.nama.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
-      const matchRole   = filterRole === 'all' || u.role === filterRole;
-      const matchStatus = filterStatus === 'all' || (filterStatus === 'aktif' ? u.aktif : !u.aktif);
-      return matchSearch && matchRole && matchStatus;
-    }),
-    (u) => u.createdAt,
-  );
+  const filtered = state.users.filter((u) => {
+    const q = search.toLowerCase();
+    const matchSearch = !q || u.nama.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+    const matchRole   = filterRole === 'all' || u.role === filterRole;
+    const matchStatus = filterStatus === 'all' || (filterStatus === 'aktif' ? u.aktif : !u.aktif);
+    return matchSearch && matchRole && matchStatus;
+  });
 
   // ── Tambah ──────────────────────────────────────────────────
   const handleRoleChange = (newRole: UserRole) => {
@@ -163,13 +168,14 @@ export default function PenggunaPage() {
                 <th>Email</th>
                 <th>Peran</th>
                 <th>Unit Kerja</th>
+                <th>Tanda Tangan</th>
                 <th>Status</th>
                 <th>Aksi</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--tinta-redup)', padding: 32 }}>Tidak ada pengguna yang cocok.</td></tr>
+                <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--tinta-redup)', padding: 32 }}>Tidak ada pengguna yang cocok.</td></tr>
               ) : filtered.map((u) => {
                 const uk = state.unitKerja.find((x) => x.id === u.unitKerjaId);
                 return (
@@ -185,6 +191,41 @@ export default function PenggunaPage() {
                           {uk.nama}{!uk.aktif && <span style={{ color: 'var(--tinta-redup)', fontSize: 11, marginLeft: 4 }}>(nonaktif)</span>}
                         </span>
                       ) : '—'}
+                    </td>
+                    <td>
+                      {u.urlTandaTangan ? (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <span className="chip chip-sukses" style={{ fontSize: 10 }}>Tersedia</span>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-ghost"
+                            style={{ padding: '2px 4px' }}
+                            title="Tinjau tanda tangan digital"
+                            onClick={() => {
+                              setSignatureModalUser(u);
+                              setSignatureUploadDataUrl(null);
+                            }}
+                          >
+                            <Eye size={13} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 11, color: 'var(--tinta-redup)' }}>Belum ada</span>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-ghost"
+                            style={{ padding: '2px 4px' }}
+                            title="Unggah tanda tangan untuk pengguna ini"
+                            onClick={() => {
+                              setSignatureModalUser(u);
+                              setSignatureUploadDataUrl(null);
+                            }}
+                          >
+                            <Upload size={13} />
+                          </button>
+                        </div>
+                      )}
                     </td>
                     <td>
                       <span className={`chip ${u.aktif ? 'chip-sukses' : 'chip-netral'}`} style={{ fontSize: 11 }}>
@@ -416,6 +457,138 @@ export default function PenggunaPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* ── Modal Kelola Tanda Tangan Digital Pengguna (Tahap 3) ── */}
+        {signatureModalUser && (
+          <ModalStandar
+            open={!!signatureModalUser}
+            onClose={() => {
+              setSignatureModalUser(null);
+              setSignatureUploadDataUrl(null);
+            }}
+            judul={`Tanda Tangan Digital: ${signatureModalUser.nama}`}
+            size="md"
+            footerSecondary={
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => {
+                  setSignatureModalUser(null);
+                  setSignatureUploadDataUrl(null);
+                }}
+              >
+                Tutup
+              </button>
+            }
+          >
+            <div style={{ fontSize: 13, lineHeight: 1.6 }}>
+              <div style={{ marginBottom: 14 }}>
+                <span className="badge badge-info">{USER_ROLE_LABELS[signatureModalUser.role]}</span>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>
+                  Email: {signatureModalUser.email}
+                </div>
+              </div>
+
+              {/* Tanda Tangan Saat Ini */}
+              <div
+                style={{
+                  padding: 14,
+                  background: 'var(--gray-50)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: 8,
+                  marginBottom: 16,
+                  textAlign: 'center',
+                }}
+              >
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 8 }}>
+                  Tanda Tangan Tersimpan:
+                </div>
+                {signatureModalUser.urlTandaTangan ? (
+                  <div>
+                    <div
+                      style={{
+                        height: 84,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        background: '#ffffff',
+                        borderRadius: 6,
+                        border: '1px solid var(--border-color)',
+                        padding: 8,
+                        marginBottom: 10,
+                      }}
+                    >
+                      <img
+                        src={signatureModalUser.urlTandaTangan}
+                        alt="Tanda Tangan"
+                        style={{ maxHeight: 72, maxWidth: '100%', objectFit: 'contain' }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-sm"
+                      onClick={() => {
+                        if (confirm(`Hapus tanda tangan digital untuk ${signatureModalUser.nama}?`)) {
+                          apiHapusTandaTangan(signatureModalUser.id);
+                          setSignatureModalUser(null);
+                        }
+                      }}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    >
+                      <Trash2 size={13} />
+                      Hapus / Reset Tanda Tangan
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ padding: '12px 0', color: 'var(--text-muted)' }}>
+                    Pengguna ini belum memiliki tanda tangan digital tersimpan.
+                  </div>
+                )}
+              </div>
+
+              {/* Form Unggah / Ganti Tanda Tangan */}
+              <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 14 }}>
+                <label style={{ display: 'block', fontWeight: 600, fontSize: 12, marginBottom: 6 }}>
+                  Unggah Berkas Tanda Tangan Baru (PNG Transparan):
+                </label>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/svg+xml"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                      setSignatureUploadDataUrl(ev.target?.result as string);
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                  className="form-control"
+                  style={{ fontSize: 12, marginBottom: 8 }}
+                />
+                {signatureUploadDataUrl && (
+                  <div style={{ textAlign: 'center', marginBottom: 10 }}>
+                    <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fff', border: '1px solid #cbd5e1', borderRadius: 4, padding: 4, marginBottom: 8 }}>
+                      <img src={signatureUploadDataUrl} alt="Pratinjau Unggah" style={{ maxHeight: 56, objectFit: 'contain' }} />
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={() => {
+                        apiUploadTandaTangan(signatureModalUser.id, signatureUploadDataUrl);
+                        setSignatureModalUser(null);
+                        setSignatureUploadDataUrl(null);
+                      }}
+                      style={{ width: '100%' }}
+                    >
+                      Simpan Tanda Tangan untuk Pengguna Ini
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </ModalStandar>
         )}
       </div>
     </DashboardLayout>

@@ -22,12 +22,11 @@ export const USER_ROLE_LABELS: Record<UserRole, string> = {
   staf_pelaksana: 'Staf Pelaksana',
 };
 
-export type SifatSurat = 'biasa' | 'umum' | 'pemberitahuan' | 'penting' | 'segera' | 'rahasia';
+export type SifatSurat = 'biasa' | 'umum' | 'penting' | 'segera' | 'rahasia';
 
 export const SIFAT_SURAT_LABELS: Record<SifatSurat, string> = {
   biasa: 'Biasa',
-  umum: 'Umum',
-  pemberitahuan: 'Umum/Pemberitahuan',
+  umum: 'Umum/Pemberitahuan',
   penting: 'Penting',
   segera: 'Segera',
   rahasia: 'Rahasia',
@@ -75,9 +74,10 @@ export type JenisInstruksi =
   | 'tanggapan_saran'
   | 'proses_lanjut'
   | 'koordinasi_konfirmasi'
-  | 'lainnya';
+  | 'lainnya'
+  | (string & {});
 
-export const JENIS_INSTRUKSI_LABELS: Record<JenisInstruksi, string> = {
+export const JENIS_INSTRUKSI_LABELS: Record<string, string> = {
   tanggapan_saran: 'Tanggapan dan Saran',
   proses_lanjut: 'Proses Lebih Lanjut',
   koordinasi_konfirmasi: 'Koordinasi/Konfirmasi',
@@ -126,6 +126,27 @@ export interface SifatSuratMaster {
   urutan: number;
 }
 
+/**
+ * Kategori Data Master Persuratan Terpadu (Tahap 6)
+ * Seluruh data jenis/kategori dikelola secara terpusat oleh Administrator
+ */
+export type KategoriDataMaster =
+  | 'sifat_surat'
+  | 'jenis_instruksi'
+  | 'instansi_asal';
+
+export interface DataMasterItem {
+  id: string;
+  kategori: KategoriDataMaster;
+  kode: string;
+  label: string;
+  keterangan?: string;
+  aktif: boolean;
+  urutan: number;
+  meta?: Record<string, any>;
+  createdAt?: string;
+}
+
 export interface UnitKerja {
   id: string;
   kode: string;
@@ -169,9 +190,9 @@ export interface User {
   unitKerjaId: string | null;
   unitKerja?: UnitKerja;
   aktif: boolean;
-  avatar?: string;
   nip?: string;
   jabatan?: string;
+  urlTandaTangan?: string; // Gambar tanda tangan digital tersimpan (PNG transparan / data URL)
   dummyPassword?: string; // HANYA prototipe; produksi memakai Supabase Auth
   createdAt: string;
 }
@@ -179,6 +200,10 @@ export interface User {
 export interface SuratMasuk {
   id: string;
   nomorAgenda: string;
+  nomorUrut?: number;
+  nomorBerkas?: string;
+  nomorPetunjuk?: string;
+  nomorPaket?: string;
   tanggalTerima: string;
   asalSurat: string;
   nomorSuratAsal: string;
@@ -216,6 +241,8 @@ export interface DisposisiTujuan {
   statusTerima: 'belum' | 'diterima';
   waktuTerima?: string;
   namaPenerimaSnapshot?: string; // snapshot nama saat paraf — K10
+  parafPenerimaanSnapshot?: string; // tanda paraf penerimaan Kabid
+  waktuParafPenerimaan?: string;
   statusProses?: 'menunggu' | 'diterima_bidang' | 'diteruskan_staf' | 'ditindak_langsung' | 'menunggu_pemeriksaan' | 'selesai';
   diteruskanKe?: string;
   catatanPenugasan?: string;
@@ -306,11 +333,18 @@ export interface TindakLanjut {
   berkasUrl?: string;
   status: 'dilaporkan' | 'disetujui' | 'dikembalikan' | 'perlu_perbaikan';
   catatanPengembalian?: string;
+  /** Nomor versi/urutan revisi laporan tindak lanjut (1 = pertama, 2 = revisi ke-2, dst) — Tahap 4 */
+  nomorRevisi?: number;
   createdAt: string;
 }
 
 export interface SuratKeluar {
   id: string;
+  nomorUrut?: number;
+  nomorBerkas?: string;
+  nomorPetunjuk?: string;
+  nomorPaket?: string;
+  sifat?: SifatSurat;
   nomorSurat: string | null;
   perihal: string;
   tujuan: string;
@@ -328,8 +362,19 @@ export interface SuratKeluar {
   /** Bukti terima di pihak tujuan (AT-13) */
   buktiTerimaTanggal?: string;
   buktiTerimaNama?: string;
-  /** Tautan ke surat masuk asal bila surat keluar ini adalah balasan */
+  /** Tautan ke surat masuk asal bila surat keluar ini adalah balasan (relasi 1 surat masuk -> banyak surat keluar) */
   suratMasukAsalId?: string;
+  /** Foreign key eksplisit sesuai ERD Gambar 14 — Tahap 4 */
+  refSuratMasukId?: string;
+  /** Snapshot tanda tangan digital Kepala Dinas saat disahkan (Tahap 3) */
+  ttdImageUrl?: string;
+  ttdNamaSnapshot?: string;
+  ttdNipSnapshot?: string;
+  ttdWaktuSnapshot?: string;
+  /** Snapshot paraf koordinasi Sekretaris Dinas saat disetujui (Tahap 3) */
+  parafImageUrl?: string;
+  parafNamaSnapshot?: string;
+  parafWaktuSnapshot?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -342,6 +387,11 @@ export interface PersetujuanSuratKeluar {
   pelaku?: User;
   catatan?: string;
   waktu: string;
+  /** Snapshot gambar tanda tangan/paraf saat aksi dilakukan (Tahap 3) */
+  urlTandaTanganSnapshot?: string;
+  namaPelakuSnapshot?: string;
+  nipPelakuSnapshot?: string;
+  jabatanPelakuSnapshot?: string;
 }
 
 export interface ArsipDigital {
@@ -360,7 +410,7 @@ export interface ArsipDigital {
   jenisSuratId?: string;
   jenisSuratObj?: JenisSurat;
   createdAt: string;
-  statusArsip?: 'disposisi' | 'selesai' | 'terkirim';
+  statusArsip?: 'disposisi' | 'selesai' | 'terkirim' | 'menunggu_verifikasi' | 'diarsipkan';
   laporanHasil?: string;
   berkasLaporanUrl?: string;
   tanggalSelesai?: string;
@@ -450,7 +500,11 @@ export type StoreAction =
   | { type: 'UPDATE_ARSIP'; payload: Partial<ArsipDigital> & { id: string } }
   | { type: 'UPDATE_COUNTER'; payload: { tahun: number; klasifikasiKode: string; counter: number } }
   | { type: 'ADD_JENIS_SURAT'; payload: JenisSurat }
-  | { type: 'UPDATE_JENIS_SURAT'; payload: Partial<JenisSurat> & { id: string } };
+  | { type: 'UPDATE_JENIS_SURAT'; payload: Partial<JenisSurat> & { id: string } }
+  | { type: 'ADD_DATA_MASTER'; payload: DataMasterItem }
+  | { type: 'UPDATE_DATA_MASTER'; payload: Partial<DataMasterItem> & { id: string } }
+  | { type: 'DELETE_DATA_MASTER'; payload: string }
+  | { type: 'RESET_DATA_SURAT' };
 
 export interface AppState {
   currentUser: User | null;
@@ -459,6 +513,8 @@ export interface AppState {
   klasifikasi: KlasifikasiSurat[];
   /** Jenis Surat menurut fungsinya (§2.4.1) */
   jenisSurat: JenisSurat[];
+  /** Data master generik terpadu (Tahap 6: sifat surat, jenis instruksi, instansi asal, dll.) */
+  dataMaster: DataMasterItem[];
   suratMasuk: SuratMasuk[];
   disposisi: Disposisi[];
   penugasan: PenugasanStaf[];

@@ -137,7 +137,13 @@ export default function Navbar() {
                 <div className="name">{user.nama}</div>
                 <div className="email">{user.email}</div>
               </div>
-              <button className="user-dropdown-item" onClick={() => { setShowUser(false); }}>
+              <button
+                className="user-dropdown-item"
+                onClick={() => {
+                  setShowUser(false);
+                  router.push('/profil');
+                }}
+              >
                 <UserIcon size={16} />
                 Profil Saya
               </button>

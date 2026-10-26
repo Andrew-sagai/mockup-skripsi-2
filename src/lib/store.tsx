@@ -13,17 +13,19 @@ import {
   SuratKeluar, Notifikasi, RiwayatStatus, PenugasanStaf,
   TindakLanjut, PersetujuanSuratKeluar, LogAktivitas,
   StatusSuratMasuk, StatusSuratKeluar, ArsipDigital, JenisSurat,
+  KategoriDataMaster, DataMasterItem, NomorSuratCounter,
+  UnitKerja, KlasifikasiSurat
 } from './types';
 import {
   USERS, UNIT_KERJA, JENIS_SURAT, KLASIFIKASI, SURAT_MASUK, DISPOSISI,
   PENUGASAN, TINDAK_LANJUT, SURAT_KELUAR, PERSETUJUAN,
   ARSIP, NOTIFIKASI, RIWAYAT, LOG_AKTIVITAS, NOMOR_SURAT_COUNTER,
-  PENGATURAN_INSTANSI,
+  PENGATURAN_INSTANSI, DATA_MASTER
 } from './mock-data';
 
 // ─── Konstanta localStorage ────────────────────────────────
-const STORAGE_KEY = 'surat-dinas-state-v3';
-const STORAGE_VERSION = 3;
+const STORAGE_KEY = 'surat-dinas-state-v6';
+const STORAGE_VERSION = 6;
 
 // ─── initialState (fallback saat belum ada data tersimpan) ─
 const initialState: AppState = {
@@ -44,6 +46,7 @@ const initialState: AppState = {
   log: LOG_AKTIVITAS,
   nomorSuratCounter: NOMOR_SURAT_COUNTER,
   pengaturanInstansi: PENGATURAN_INSTANSI,
+  dataMaster: DATA_MASTER,
 };
 
 // ─── loadState — baca dari localStorage, fallback ke initialState ─
@@ -51,8 +54,39 @@ function loadState(): AppState {
   // Guard: jangan jalankan di server (Next.js SSR)
   if (typeof window === 'undefined') return initialState;
   try {
+    // Bersihkan cache persuratan versi lama agar reset data surat tuntas
+    const oldKeys = ['surat-dinas-state', 'surat-dinas-state-v1', 'surat-dinas-state-v2', 'surat-dinas-state-v3', 'surat-dinas-state-v4', 'surat-dinas-state-v5'];
+    let preservedUsers: User[] | null = null;
+    let preservedUnitKerja: UnitKerja[] | null = null;
+    let preservedDataMaster: DataMasterItem[] | null = null;
+
+    for (const oldKey of oldKeys) {
+      const oldVal = localStorage.getItem(oldKey);
+      if (oldVal) {
+        try {
+          const oldObj = JSON.parse(oldVal);
+          if (oldObj.users && !preservedUsers) preservedUsers = oldObj.users;
+          if (oldObj.unitKerja && !preservedUnitKerja) preservedUnitKerja = oldObj.unitKerja;
+          if (oldObj.dataMaster && !preservedDataMaster) preservedDataMaster = oldObj.dataMaster;
+        } catch { /* ignore */ }
+        localStorage.removeItem(oldKey);
+      }
+    }
+
     const raw = localStorage.getItem(STORAGE_KEY);
     let loadedState = { ...initialState };
+    if (preservedUsers && preservedUsers.length > 0) {
+      // Pertahankan user kustom yang telah dibuat sebelumnya
+      const mergedU = [...initialState.users];
+      preservedUsers.forEach(pu => {
+        if (!mergedU.some(mu => mu.id === pu.id || mu.email.toLowerCase() === pu.email.toLowerCase())) {
+          mergedU.push(pu);
+        }
+      });
+      loadedState.users = mergedU;
+    }
+    if (preservedUnitKerja) loadedState.unitKerja = preservedUnitKerja;
+    if (preservedDataMaster) loadedState.dataMaster = preservedDataMaster;
     
     if (raw) {
       const parsed = JSON.parse(raw);
@@ -117,17 +151,82 @@ function loadState(): AppState {
           }
         });
 
-        const migratedSuratKeluar = (rest.suratKeluar || []).map((sk: SuratKeluar) => 
+        const existingSuratKeluar: SuratKeluar[] = rest.suratKeluar || [];
+        const mergedSuratKeluar = [...existingSuratKeluar];
+        SURAT_KELUAR.forEach((defaultSk) => {
+          const idx = mergedSuratKeluar.findIndex(sk => sk.id === defaultSk.id || (defaultSk.nomorUrut && sk.nomorUrut === defaultSk.nomorUrut));
+          if (idx >= 0) {
+            mergedSuratKeluar[idx] = { ...mergedSuratKeluar[idx], ...defaultSk };
+          } else {
+            mergedSuratKeluar.push(defaultSk);
+          }
+        });
+        const migratedSuratKeluar = mergedSuratKeluar.map((sk: SuratKeluar) => 
           sk.status === ('diajukan' as any) ? { ...sk, status: 'menunggu_paraf' } : sk
         );
+
+        const existingSuratMasuk: SuratMasuk[] = rest.suratMasuk || [];
+        const mergedSuratMasuk = [...existingSuratMasuk];
+        SURAT_MASUK.forEach((defaultSm) => {
+          const idx = mergedSuratMasuk.findIndex(sm => sm.id === defaultSm.id || (defaultSm.nomorUrut && sm.nomorUrut === defaultSm.nomorUrut));
+          if (idx >= 0) {
+            mergedSuratMasuk[idx] = { ...mergedSuratMasuk[idx], ...defaultSm };
+          } else {
+            mergedSuratMasuk.push(defaultSm);
+          }
+        });
+
+        const existingDisposisi: Disposisi[] = rest.disposisi || [];
+        const mergedDisposisi = [...existingDisposisi];
+        DISPOSISI.forEach((defaultDisp) => {
+          if (!mergedDisposisi.some(d => d.id === defaultDisp.id)) {
+            mergedDisposisi.push(defaultDisp);
+          }
+        });
+
+        const existingArsip: ArsipDigital[] = rest.arsip || [];
+        const mergedArsip = [...existingArsip];
+        ARSIP.forEach((defaultArsip) => {
+          if (!mergedArsip.some(a => a.id === defaultArsip.id)) {
+            mergedArsip.push(defaultArsip);
+          }
+        });
+
+        // Pastikan seluruh entri data master default tersedia
+        const existingDataMaster: DataMasterItem[] = parsed.dataMaster || [];
+        const mergedDataMaster = [...existingDataMaster];
+        DATA_MASTER.forEach((defaultDm) => {
+          if (!mergedDataMaster.some(d => d.id === defaultDm.id)) {
+            mergedDataMaster.push(defaultDm);
+          }
+        });
+        // Pastikan counter nomor surat default terdaftar
+        const existingCounters: NomorSuratCounter[] = parsed.nomorSuratCounter || [];
+        const mergedCounters = [...existingCounters];
+        NOMOR_SURAT_COUNTER.forEach((defaultCounter) => {
+          const idx = mergedCounters.findIndex(c => c.tahun === defaultCounter.tahun && c.klasifikasiKode === defaultCounter.klasifikasiKode);
+          if (idx >= 0) {
+            mergedCounters[idx] = {
+              ...mergedCounters[idx],
+              counter: Math.max(mergedCounters[idx].counter, defaultCounter.counter)
+            };
+          } else {
+            mergedCounters.push(defaultCounter);
+          }
+        });
 
         loadedState = {
           ...initialState,
           ...rest,
+          suratMasuk: mergedSuratMasuk,
+          disposisi: mergedDisposisi,
           suratKeluar: migratedSuratKeluar,
+          arsip: mergedArsip,
           jenisSurat: mergedJenis,
           users: normalizedUsers,
           unitKerja: mergedUnitKerja,
+          dataMaster: mergedDataMaster,
+          nomorSuratCounter: mergedCounters,
           // Pengaturan instansi selalu dari initialState (Admin manage via Data Master)
           pengaturanInstansi: PENGATURAN_INSTANSI,
         };
@@ -259,15 +358,14 @@ function appReducer(state: AppState, action: StoreAction | { type: 'HYDRATE_FROM
 
     case 'ADD_USER':
       return { ...state, users: [...state.users, (action as Extract<StoreAction, { type: 'ADD_USER' }>).payload] };
-    case 'UPDATE_USER':
+    case 'UPDATE_USER': {
+      const payload = (action as Extract<StoreAction, { type: 'UPDATE_USER' }>).payload;
       return {
         ...state,
-        users: state.users.map((u) =>
-          u.id === (action as Extract<StoreAction, { type: 'UPDATE_USER' }>).payload.id
-            ? { ...u, ...(action as Extract<StoreAction, { type: 'UPDATE_USER' }>).payload }
-            : u
-        ),
+        users: state.users.map((u) => (u.id === payload.id ? { ...u, ...payload } : u)),
+        currentUser: state.currentUser?.id === payload.id ? { ...state.currentUser, ...payload } : state.currentUser,
       };
+    }
 
     case 'ADD_JENIS_SURAT':
       return { ...state, jenisSurat: [...state.jenisSurat, (action as Extract<StoreAction, { type: 'ADD_JENIS_SURAT' }>).payload] };
@@ -279,6 +377,23 @@ function appReducer(state: AppState, action: StoreAction | { type: 'HYDRATE_FROM
             ? { ...j, ...(action as Extract<StoreAction, { type: 'UPDATE_JENIS_SURAT' }>).payload }
             : j
         ),
+      };
+
+    case 'ADD_DATA_MASTER':
+      return { ...state, dataMaster: [...state.dataMaster, (action as Extract<StoreAction, { type: 'ADD_DATA_MASTER' }>).payload] };
+    case 'UPDATE_DATA_MASTER':
+      return {
+        ...state,
+        dataMaster: state.dataMaster.map((dm) =>
+          dm.id === (action as Extract<StoreAction, { type: 'UPDATE_DATA_MASTER' }>).payload.id
+            ? { ...dm, ...(action as Extract<StoreAction, { type: 'UPDATE_DATA_MASTER' }>).payload }
+            : dm
+        ),
+      };
+    case 'DELETE_DATA_MASTER':
+      return {
+        ...state,
+        dataMaster: state.dataMaster.filter((dm) => dm.id !== (action as Extract<StoreAction, { type: 'DELETE_DATA_MASTER' }>).payload),
       };
 
     case 'ADD_KLASIFIKASI':
@@ -339,6 +454,25 @@ function appReducer(state: AppState, action: StoreAction | { type: 'HYDRATE_FROM
       return { ...state, nomorSuratCounter: [...(state.nomorSuratCounter || []), p] };
     }
 
+    case 'RESET_DATA_SURAT':
+      return {
+        ...state,
+        suratMasuk: [],
+        disposisi: [],
+        penugasan: [],
+        tindakLanjut: [],
+        suratKeluar: [],
+        persetujuan: [],
+        arsip: [],
+        riwayat: [],
+        notifikasi: [],
+        log: [],
+        nomorSuratCounter: [
+          { tahun: new Date().getFullYear(), klasifikasiKode: 'SURAT_MASUK', counter: 0 },
+          { tahun: new Date().getFullYear(), klasifikasiKode: 'SURAT_KELUAR', counter: 0 },
+        ],
+      };
+
     default:
       return state;
   }
@@ -358,6 +492,8 @@ interface StoreContextType {
   getUnitKerja: (id: string) => typeof UNIT_KERJA[0] | undefined;
   getJenisSurat: (id: string | undefined) => JenisSurat | undefined;
   getKlasifikasi: (id: string) => typeof KLASIFIKASI[0] | undefined;
+  getDataMaster: (kategori?: KategoriDataMaster, hanyaAktif?: boolean) => DataMasterItem[];
+  getMasterLabel: (kategori: KategoriDataMaster, kode: string, defaultVal?: string) => string;
   getUnreadCount: () => number;
   generateId: (prefix: string) => string;
   generateNomorSurat: (klasifikasiKode: string) => string;
@@ -674,7 +810,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return state.suratMasuk.filter(s => mySMIds.includes(s.id));
     }
 
-    // petugas_surat, sekretaris, kepala_dinas: akses penuh
+    if (role === 'sekretaris') {
+      // Sekretaris: akses surat dinas, namun surat rahasia hanya jika sekretariat menjadi tujuan disposisi
+      return state.suratMasuk.filter(s => {
+        if (s.sifat !== 'rahasia') return true;
+        return state.disposisi.some(d => d.suratMasukId === s.id && d.bidangTujuan.some(b => b.unitKerjaId === state.currentUser!.unitKerjaId));
+      });
+    }
+
+    // petugas_surat, admin, kepala_dinas: akses penuh
     return state.suratMasuk;
   }, [state.currentUser, state.suratMasuk, state.disposisi, state.penugasan]);
 
@@ -729,6 +873,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return state.arsip;
   }, [state.currentUser, state.arsip, state.penugasan, state.disposisi]);
 
+  const getDataMaster = useCallback((kategori?: KategoriDataMaster, hanyaAktif: boolean = true) => {
+    return (state.dataMaster || [])
+      .filter(d => (!kategori || d.kategori === kategori) && (!hanyaAktif || d.aktif))
+      .sort((a, b) => (a.urutan || 0) - (b.urutan || 0));
+  }, [state.dataMaster]);
+
+  const getMasterLabel = useCallback((kategori: KategoriDataMaster, kode: string, defaultVal?: string) => {
+    const item = (state.dataMaster || []).find(d => d.kategori === kategori && d.kode.toLowerCase() === (kode || '').toLowerCase());
+    return item ? item.label : (defaultVal || kode);
+  }, [state.dataMaster]);
+
   // ─── Provider value ───────────────────────────────────
   return (
     <StoreContext.Provider
@@ -744,6 +899,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         getUnitKerja,
         getJenisSurat,
         getKlasifikasi,
+        getDataMaster,
+        getMasterLabel,
         getUnreadCount,
         generateId,
         generateNomorSurat,

@@ -1,21 +1,21 @@
 'use client';
-import React, { useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useStore } from '@/lib/store';
-import { urutkanTerbaru } from '@/lib/utils';
-import { ModalStandar, Toast } from '@/components/ui';
-import { Search, Archive, Download, FileText } from 'lucide-react';
+import { useApi } from '@/lib/api';
+import { Search, Archive, Download, FileText, Eye, CheckCircle2 } from 'lucide-react';
+import { ModalStandar, PdfViewerEmbedded } from '@/components/ui';
 
 export default function ArsipPage() {
   const { state, getKlasifikasi, getJenisSurat, getScopedArsip } = useStore();
+  const api = useApi();
   const [search, setSearch] = useState('');
   const [filterArah, setFilterArah] = useState('all'); // Arah Surat (Masuk/Keluar)
-  const [filterJenisSurat, setFilterJenisSurat] = useState('all');
-  const [filterKlasifikasi, setFilterKlasifikasi] = useState('all');
+  const [filterJenisSurat, setFilterJenisSurat] = useState('all'); // Jenis Surat (Fungsi)
+  const [filterKlasifikasi, setFilterKlasifikasi] = useState('all'); // Kode Klasifikasi Arsip
   const [filterTahun, setFilterTahun] = useState('all');
   const [selectedArsip, setSelectedArsip] = useState<typeof state.arsip[0] | null>(null);
-  const [toastPesan, setToastPesan] = useState<string | null>(null);
-  const tutupModal = useCallback(() => setSelectedArsip(null), []);
+  const [pesanSukses, setPesanSukses] = useState<string | null>(null);
 
   if (state.currentUser?.role === 'admin') {
     return (
@@ -31,7 +31,20 @@ export default function ArsipPage() {
   const user = state.currentUser;
   const isPetugas = user?.role === 'petugas_surat';
 
-  const arsipList = urutkanTerbaru(getScopedArsip(), (a) => a.createdAt);
+  const arsipList = getScopedArsip();
+
+  const handleVerifikasi = (arsipId: string) => {
+    try {
+      api.apiVerifikasiArsip(arsipId);
+      setPesanSukses('Kode klasifikasi berhasil diverifikasi dan status dokumen resmi menjadi Diarsipkan (terkunci/read-only).');
+      setTimeout(() => setPesanSukses(null), 4000);
+      if (selectedArsip && selectedArsip.id === arsipId) {
+        setSelectedArsip({ ...selectedArsip, statusArsip: 'diarsipkan' });
+      }
+    } catch (e: any) {
+      alert(e.message || 'Gagal memverifikasi arsip.');
+    }
+  };
 
   const handleDownload = (arsip: typeof state.arsip[0], type: 'asli' | 'salinan' = 'asli') => {
     // Generate text/pdf dummy blob with official header & metadata
@@ -41,7 +54,7 @@ export default function ArsipPage() {
 % Nomor Surat: ${arsip.nomorSurat}
 % Perihal: ${arsip.perihal}
 % Tahun: ${arsip.tahun}
-% Status: Terverifikasi dalam Sistem Manajemen Persuratan Minsel
+% Status: ${arsip.statusArsip === 'diarsipkan' ? 'Diarsipkan (Terkunci/Read-Only)' : 'Terverifikasi dalam Sistem Manajemen Persuratan Minsel'}
 ${type === 'salinan' ? '% CATATAN: Ini adalah salinan arsip dengan riwayat paraf koordinasi.' : '% CATATAN: Ini adalah berkas kirim asli tanpa paraf koordinasi (bersih).'}
 `;
     const blob = new Blob([content], { type: 'application/pdf' });
@@ -78,9 +91,16 @@ ${type === 'salinan' ? '% CATATAN: Ini adalah salinan arsip dengan riwayat paraf
         <div className="page-header">
           <div className="page-header-left">
             <h1>Arsip Digital</h1>
-            <p>Pusat temu balik arsip persuratan berdasarkan jenis surat dan kode klasifikasi kearsipan</p>
+            <p>Pengarsipan dinamis dan temu balik dokumen digital berdasarkan kode klasifikasi arsip</p>
           </div>
         </div>
+
+        {pesanSukses && (
+          <div style={{ background: '#ecfdf5', border: '1px solid #10b981', color: '#065f46', padding: '10px 14px', borderRadius: 6, marginBottom: 14, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CheckCircle2 size={16} />
+            <span>{pesanSukses}</span>
+          </div>
+        )}
 
         <div className="filter-bar" style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
           <div className="search-input-wrapper" style={{ flex: '1 1 240px' }}>
@@ -150,7 +170,7 @@ ${type === 'salinan' ? '% CATATAN: Ini adalah salinan arsip dengan riwayat paraf
                 <th>Perihal</th>
                 <th>Kode Klasifikasi Arsip</th>
                 <th>Tahun</th>
-                <th>Status</th>
+                <th>Status Arsip</th>
                 <th>Aksi</th>
               </tr>
             </thead>
@@ -201,18 +221,30 @@ ${type === 'salinan' ? '% CATATAN: Ini adalah salinan arsip dengan riwayat paraf
                     <td style={{ fontSize: 13 }}>{a.tahun}</td>
                     <td>
                       {(() => {
-                        const st = (a as any).statusArsip || 'selesai';
+                        const st = (a as any).statusArsip || 'diarsipkan';
                         const cfg: Record<string, { cls: string; label: string }> = {
-                          disposisi: { cls: 'badge-warning', label: 'Dalam Proses' },
-                          selesai: { cls: 'badge-success', label: 'Selesai' },
+                          disposisi: { cls: 'badge-warning', label: 'Dalam Proses Disposisi' },
+                          selesai: { cls: 'badge-info', label: 'Selesai Tindak Lanjut' },
                           terkirim: { cls: 'badge-info', label: 'Terkirim' },
+                          menunggu_verifikasi: { cls: 'badge-warning', label: 'Menunggu Verifikasi' },
+                          diarsipkan: { cls: 'badge-success', label: 'Diarsipkan (Terkunci)' },
                         };
                         const c = cfg[st] || { cls: 'badge-gray', label: st };
-                        return <span className={`badge ${c.cls}`} style={{ fontSize: 11 }}>{c.label}</span>;
+                        return <span className={`badge ${c.cls}`} style={{ fontSize: 11, fontWeight: 600 }}>{c.label}</span>;
                       })()}
                     </td>
                     <td>
                       <div className="table-actions">
+                        {isPetugas && a.statusArsip === 'menunggu_verifikasi' && (
+                          <button
+                            className="btn btn-sm btn-outline-success"
+                            title="Verifikasi Kode Klasifikasi & Kunci Arsip"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', fontSize: 12 }}
+                            onClick={() => handleVerifikasi(a.id)}
+                          >
+                            <CheckCircle2 size={13} /> Verifikasi
+                          </button>
+                        )}
                         <button 
                           className="btn btn-sm btn-ghost" 
                           title="Lihat Berkas"
@@ -236,91 +268,77 @@ ${type === 'salinan' ? '% CATATAN: Ini adalah salinan arsip dengan riwayat paraf
           </table>
         </div>
 
-        {/* Modal Pratinjau Arsip — P7: pakai ModalStandar bukan overlay manual */}
-        <ModalStandar
-          open={!!selectedArsip}
-          onClose={tutupModal}
-          judul="Pratinjau Berkas Arsip Digital"
-          size="lg"
-          footerSecondary={
-            <button className="btn btn-ghost" onClick={tutupModal}>Tutup</button>
-          }
-          footerPrimary={
-            <>
-              {isPetugas && (
-                <>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => setToastPesan('Koreksi metadata akan tersedia pada versi produksi.')}
-                  >Koreksi Metadata</button>
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => setToastPesan('Unggah bukti terima akan tersedia pada versi produksi.')}
-                  >Lengkapi Bukti Terima</button>
-                </>
-              )}
-              {selectedArsip?.jenisSurat === 'keluar' ? (
-                <>
-                  <button className="btn btn-secondary" onClick={() => handleDownload(selectedArsip!, 'asli')}>
-                    <Download size={16} aria-hidden="true" /> Unduh Berkas Kirim
+        {/* Modal Preview Berkas Arsip Embedded */}
+        {selectedArsip && (
+          <ModalStandar
+            open={!!selectedArsip}
+            onClose={() => setSelectedArsip(null)}
+            judul={`Pratinjau Berkas Arsip Digital — Kode: ${selectedArsip.kodeArsip}`}
+            size="lg"
+            footerSecondary={
+              <button className="btn btn-ghost" onClick={() => setSelectedArsip(null)}>
+                Tutup Pratinjau
+              </button>
+            }
+            footerPrimary={
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                {isPetugas && selectedArsip.statusArsip === 'menunggu_verifikasi' && (
+                  <button className="btn btn-outline-success" onClick={() => handleVerifikasi(selectedArsip.id)}>
+                    <CheckCircle2 size={14} aria-hidden="true" /> Verifikasi & Kunci Arsip
                   </button>
-                  <button className="btn btn-primary" onClick={() => handleDownload(selectedArsip!, 'salinan')}>
-                    <Download size={16} aria-hidden="true" /> Unduh Salinan Arsip (Paraf)
+                )}
+                {selectedArsip.jenisSurat === 'keluar' ? (
+                  <>
+                    <button className="btn btn-secondary" onClick={() => handleDownload(selectedArsip, 'asli')}>
+                      <Download size={14} aria-hidden="true" /> Unduh Berkas Kirim
+                    </button>
+                    <button className="btn btn-primary" onClick={() => handleDownload(selectedArsip, 'salinan')}>
+                      <Download size={14} aria-hidden="true" /> Unduh Salinan Arsip
+                    </button>
+                  </>
+                ) : (
+                  <button className="btn btn-primary" onClick={() => handleDownload(selectedArsip)}>
+                    <Download size={14} aria-hidden="true" /> Unduh Berkas Asli
                   </button>
-                </>
-              ) : (
-                <button className="btn btn-primary" onClick={() => handleDownload(selectedArsip!)}>
-                  <Download size={16} aria-hidden="true" /> Unduh Berkas PDF
-                </button>
-              )}
-            </>
-          }
-        >
-          {selectedArsip && (
-            <>
-              {selectedArsip.perihal.toLowerCase().includes('rahasia') && (
-                <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 6, padding: '8px 14px', fontSize: 13, color: '#991b1b', marginBottom: 16 }}>
-                  <strong>SURAT RAHASIA:</strong> Dokumen ini bersifat rahasia dan akses log Anda sedang direkam.
-                </div>
-              )}
-              <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 8, padding: 24, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
-                <div style={{ textAlign: 'center', borderBottom: '2px solid #334155', paddingBottom: 16, marginBottom: 16 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#475569' }}>PEMERINTAH KABUPATEN MINAHASA SELATAN</div>
-                  <div style={{ fontSize: 16, fontWeight: 800, textTransform: 'uppercase', color: '#0f172a', margin: '4px 0' }}>DINAS PERTANIAN</div>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>Kompleks Perkantoran Pemerintah Kabupaten Minahasa Selatan, Jl. Trans Sulawesi, Amurang</div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '120px 1fr', gap: '8px 16px', fontSize: 13, marginBottom: 20 }}>
-                  <div style={{ fontWeight: 600, color: '#64748b' }}>Kode Arsip:</div>
-                  <div style={{ fontWeight: 700, fontFamily: 'monospace' }}>{selectedArsip.kodeArsip}</div>
-                  <div style={{ fontWeight: 600, color: '#64748b' }}>Nomor Surat:</div>
-                  <div style={{ fontWeight: 600 }}>{selectedArsip.nomorSurat}</div>
-                  <div style={{ fontWeight: 600, color: '#64748b' }}>Arah / Jenis:</div>
-                  <div>
-                    <span className={`badge ${selectedArsip.jenisSurat === 'masuk' ? 'badge-info' : 'badge-primary'}`}>
-                      {selectedArsip.jenisSurat === 'masuk' ? 'Surat Masuk' : 'Surat Keluar'}
-                    </span>
-                  </div>
-                  <div style={{ fontWeight: 600, color: '#64748b' }}>Perihal:</div>
-                  <div style={{ fontWeight: 700, color: '#0f172a' }}>{selectedArsip.perihal}</div>
-                  <div style={{ fontWeight: 600, color: '#64748b' }}>Klasifikasi:</div>
-                  <div>{getKlasifikasi(selectedArsip.klasifikasiId)?.nama || '-'}</div>
-                  <div style={{ fontWeight: 600, color: '#64748b' }}>Tahun Arsip:</div>
-                  <div>{selectedArsip.tahun}</div>
-                </div>
-                <div style={{ background: '#ffffff', border: '1px dashed #cbd5e1', borderRadius: 6, padding: 20, textAlign: 'center', margin: '16px 0' }}>
-                  <FileText size={40} style={{ color: '#0284c7', margin: '0 auto 8px auto', display: 'block' }} />
-                  <div style={{ fontWeight: 600, fontSize: 14, color: '#1e293b' }}>Dokumen Digital Terautentikasi</div>
-                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                    Berkas digital ini tersimpan dalam basis data arsip resmi Dinas Pertanian Kabupaten Minahasa Selatan.
-                  </div>
-                </div>
+                )}
               </div>
-            </>
-          )}
-        </ModalStandar>
+            }
+          >
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--latar, #F3F5F4)', padding: '10px 14px', borderRadius: 6, fontSize: 13 }}>
+                <div>
+                  <strong>No. Surat:</strong> {selectedArsip.nomorSurat} | <strong>Tahun:</strong> {selectedArsip.tahun}
+                </div>
+                <span className={`chip ${selectedArsip.jenisSurat === 'masuk' ? 'chip-info' : 'chip-sukses'}`} style={{ fontSize: 11, fontWeight: 600 }}>
+                  {selectedArsip.jenisSurat === 'masuk' ? 'Surat Masuk' : 'Surat Keluar Final'}
+                </span>
+              </div>
 
-        {/* P9: Toast info untuk aksi yang belum diimplementasi */}
-        <Toast pesan={toastPesan} tingkat="info" onTutup={() => setToastPesan(null)} />
+              {selectedArsip.perihal.toLowerCase().includes('rahasia') && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 6, padding: '8px 14px', fontSize: 12, color: '#991b1b' }}>
+                  <strong>SURAT RAHASIA:</strong> Dokumen ini bersifat rahasia dan akses log Anda tercatat dalam audit sistem.
+                </div>
+              )}
+
+              <PdfViewerEmbedded
+                fileUrl={
+                  selectedArsip.berkasUrl ||
+                  (selectedArsip.jenisSurat === 'masuk' ? '/docs/sample-surat-masuk.pdf' : '/docs/sample-surat-keluar.pdf')
+                }
+                judul={`Arsip ${selectedArsip.kodeArsip} — ${selectedArsip.perihal}`}
+                metadata={{
+                  nomor: selectedArsip.nomorSurat,
+                  perihal: selectedArsip.perihal,
+                  klasifikasi: getKlasifikasi(selectedArsip.klasifikasiId)?.nama,
+                  tanggal: String(selectedArsip.tahun),
+                  isiRingkas: `Berkas arsip digital resmi tersimpan dalam basis data kearsipan Dinas Pertanian Kabupaten Minahasa Selatan. Kode klasifikasi: ${getKlasifikasi(selectedArsip.klasifikasiId)?.kode || '-'}.`,
+                }}
+                onDownload={() => handleDownload(selectedArsip)}
+                height={520}
+              />
+            </div>
+          </ModalStandar>
+        )}
       </div>
     </DashboardLayout>
   );

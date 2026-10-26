@@ -9,11 +9,13 @@ export const routePermissions: Record<string, UserRole[]> = {
   '/disposisi': ['petugas_surat', 'sekretaris', 'kepala_dinas', 'kepala_bidang', 'staf_pelaksana'],
   '/tindak-lanjut': ['kepala_bidang'],
   '/tugas-saya': ['staf_pelaksana'],
+  '/paraf-ttd': ['sekretaris', 'kepala_dinas'],
   '/surat-keluar': ['petugas_surat', 'sekretaris', 'kepala_dinas', 'kepala_bidang', 'staf_pelaksana'],
   '/arsip': ['petugas_surat', 'sekretaris', 'kepala_dinas', 'kepala_bidang', 'staf_pelaksana'],         // Admin TIDAK punya akses (Tabel 7-9)
   '/pelacakan': ['petugas_surat', 'sekretaris', 'kepala_dinas', 'kepala_bidang', 'staf_pelaksana'],     // Admin TIDAK punya akses
   '/notifikasi': ['petugas_surat', 'sekretaris', 'kepala_dinas', 'kepala_bidang', 'staf_pelaksana'],   // Admin TIDAK punya akses
   '/laporan': ['petugas_surat', 'sekretaris', 'kepala_dinas', 'kepala_bidang', 'staf_pelaksana'],
+  '/profil': ['admin', 'petugas_surat', 'sekretaris', 'kepala_dinas', 'kepala_bidang', 'staf_pelaksana'],
   '/admin': ['admin'],
 };
 
@@ -145,6 +147,7 @@ export function getMenuItems(role: UserRole): MenuItem[] {
     { id: 'disposisi', label: 'Disposisi', icon: 'FileCheck', href: '/disposisi' },
     { id: 'tindak-lanjut', label: 'Tindak Lanjut', icon: 'ListChecks', href: '/tindak-lanjut' },
     { id: 'tugas-saya', label: 'Tugas Saya', icon: 'ClipboardList', href: '/tugas-saya' },
+    { id: 'paraf-ttd', label: 'Paraf & Tanda Tangan', icon: 'FilePen', href: '/paraf-ttd' },
     { id: 'surat-keluar', label: 'Surat Keluar', icon: 'Send', href: '/surat-keluar' },
     { id: 'arsip', label: 'Arsip Digital', icon: 'Archive', href: '/arsip', permission: 'arsip:view' },
     { id: 'pelacakan', label: 'Pelacakan Status', icon: 'Search', href: '/pelacakan', permission: 'pelacakan:view' },
@@ -159,8 +162,8 @@ export function getMenuItems(role: UserRole): MenuItem[] {
   const roleMenus: Record<UserRole, string[]> = {
     admin: ['dashboard', 'pengguna', 'data-master', 'log-aktivitas', 'laporan-admin'],
     petugas_surat: ['dashboard', 'surat-masuk', 'surat-keluar', 'disposisi', 'arsip', 'pelacakan', 'notifikasi', 'laporan'],
-    sekretaris: ['dashboard', 'surat-keluar', 'disposisi', 'pelacakan', 'arsip', 'notifikasi', 'laporan'],
-    kepala_dinas: ['dashboard', 'disposisi', 'surat-keluar', 'pelacakan', 'arsip', 'notifikasi', 'laporan'],
+    sekretaris: ['dashboard', 'paraf-ttd', 'surat-keluar', 'disposisi', 'pelacakan', 'arsip', 'notifikasi', 'laporan'],
+    kepala_dinas: ['dashboard', 'paraf-ttd', 'disposisi', 'surat-keluar', 'pelacakan', 'arsip', 'notifikasi', 'laporan'],
     kepala_bidang: ['dashboard', 'disposisi', 'tindak-lanjut', 'pelacakan', 'arsip', 'notifikasi', 'laporan'],
     staf_pelaksana: ['dashboard', 'tugas-saya', 'pelacakan', 'arsip', 'notifikasi', 'laporan'],
   };

@@ -7,7 +7,8 @@ import { useStore } from '@/lib/store';
 import { useBusinessLogic } from '@/lib/api';
 import { SIFAT_SURAT_LABELS, STATUS_SURAT_MASUK_LABELS } from '@/lib/types';
 import { hasPermission } from '@/lib/rbac';
-import { ArrowLeft, FileText, Calendar, Building, Tag, Shield, Clock, User } from 'lucide-react';
+import { ArrowLeft, FileText, Calendar, Building, Tag, Shield, Clock, User, Eye, Download, CheckCircle, Send } from 'lucide-react';
+import { PdfViewerEmbedded, ModalStandar, KonsepSuratPreview, ChipStatus } from '@/components/ui';
 
 export default function SuratMasukDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -17,6 +18,7 @@ export default function SuratMasukDetailPage({ params }: { params: Promise<{ id:
   const user = state.currentUser;
   const [errorMsg, setErrorMsg] = React.useState('');
   const [showPdfModal, setShowPdfModal] = React.useState(false);
+  const [previewReply, setPreviewReply] = React.useState<any>(null);
 
   const handleDownload = () => {
     if (!surat) return;
@@ -87,6 +89,10 @@ export default function SuratMasukDetailPage({ params }: { params: Promise<{ id:
     }
   };
 
+  const replies = surat
+    ? state.suratKeluar.filter((sk) => sk.suratMasukAsalId === surat.id || sk.refSuratMasukId === surat.id)
+    : [];
+
   const getSifatBadge = (sifat: string) => {
     const map: Record<string, string> = { biasa: 'badge-gray', pemberitahuan: 'badge-info', penting: 'badge-warning', segera: 'badge-danger', rahasia: 'badge-purple' };
     return map[sifat] || 'badge-gray';
@@ -114,6 +120,11 @@ export default function SuratMasukDetailPage({ params }: { params: Promise<{ id:
               {jenis && <span className="badge badge-primary" style={{ fontSize: 13 }}>{jenis.nama}</span>}
               <span className={`badge ${getSifatBadge(surat.sifat)}`}>{SIFAT_SURAT_LABELS[surat.sifat]}</span>
               <span className={`badge ${getStatusBadge(surat.status)}`}>{STATUS_SURAT_MASUK_LABELS[surat.status]}</span>
+              {replies.length > 0 && (
+                <span className="badge badge-success" style={{ fontSize: 13, display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
+                  <CheckCircle size={13} /> Sudah Dibalas ({replies.length}x)
+                </span>
+              )}
             </div>
             <h1 className="detail-title">{surat.perihal}</h1>
             <div className="detail-meta">
@@ -135,6 +146,15 @@ export default function SuratMasukDetailPage({ params }: { params: Promise<{ id:
             {canGiveDisposisi && disposisi && (
               <Link href={`/disposisi/${disposisi.id}`} className="btn btn-primary">
                 Beri Disposisi
+              </Link>
+            )}
+            {(isPetugasOrAdmin || user?.role === 'kepala_bidang') && surat.status !== 'diagenda' && (
+              <Link
+                href={`/surat-keluar/baru?smId=${surat.id}${disposisi ? `&disposisiId=${disposisi.id}` : ''}`}
+                className="btn btn-ghost"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <Send size={15} /> {replies.length > 0 ? `Buat Balasan Tambahan (${replies.length}x)` : 'Susun Surat Balasan'}
               </Link>
             )}
           </div>
@@ -188,7 +208,7 @@ export default function SuratMasukDetailPage({ params }: { params: Promise<{ id:
                   <div className="info-label">Berkas Lampiran</div>
                   <div className="info-value" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <FileText size={16} style={{ color: 'var(--danger)' }} />
-                    <span>Dokumen PDF</span>
+                    <span>Dokumen PDF Utama</span>
                     <button 
                       className="btn btn-sm btn-secondary"
                       onClick={() => setShowPdfModal(true)}
@@ -235,56 +255,144 @@ export default function SuratMasukDetailPage({ params }: { params: Promise<{ id:
           </div>
         </div>
 
-        {/* Modal Preview Berkas PDF Surat Masuk (Bab 4 Poin 9) */}
-        {showPdfModal && (
-          <div className="modal-overlay" onClick={() => setShowPdfModal(false)}>
-            <div className="modal modal-lg" onClick={e => e.stopPropagation()} style={{ maxWidth: 680 }}>
-              <div className="modal-header">
-                <h2>Pratinjau Berkas Lampiran Surat Masuk</h2>
-                <button className="modal-close" onClick={() => setShowPdfModal(false)}>✕</button>
-              </div>
-              <div className="modal-body">
-                <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 8, padding: 24, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}>
-                  <div style={{ textAlign: 'center', borderBottom: '2px solid #334155', paddingBottom: 16, marginBottom: 16 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.05em', color: '#475569' }}>BERKAS NASKAH SURAT ASAL</div>
-                    <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: '4px 0' }}>{surat.asalSurat}</div>
-                    <div style={{ fontSize: 12, color: '#64748b' }}>Nomor: {surat.nomorSuratAsal} | Tanggal: {new Date(surat.tanggalSuratAsal).toLocaleDateString('id-ID')}</div>
-                  </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '130px 1fr', gap: '8px 16px', fontSize: 13, marginBottom: 20 }}>
-                    <div style={{ fontWeight: 600, color: '#64748b' }}>Nomor Agenda:</div>
-                    <div style={{ fontWeight: 700, fontFamily: 'monospace' }}>{surat.nomorAgenda}</div>
-
-                    <div style={{ fontWeight: 600, color: '#64748b' }}>Perihal:</div>
-                    <div style={{ fontWeight: 700, color: '#0f172a' }}>{surat.perihal}</div>
-
-                    <div style={{ fontWeight: 600, color: '#64748b' }}>Sifat Surat:</div>
-                    <div>
-                      <span className={`badge ${getSifatBadge(surat.sifat)}`}>{SIFAT_SURAT_LABELS[surat.sifat]}</span>
-                    </div>
-
-                    <div style={{ fontWeight: 600, color: '#64748b' }}>Tanggal Terima:</div>
-                    <div>{new Date(surat.tanggalTerima).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</div>
-                  </div>
-
-                  <div style={{ background: '#ffffff', border: '1px dashed #cbd5e1', borderRadius: 6, padding: 20, textAlign: 'center', margin: '16px 0' }}>
-                    <FileText size={44} style={{ color: '#dc2626', margin: '0 auto 8px auto', display: 'block' }} />
-                    <div style={{ fontWeight: 600, fontSize: 14, color: '#1e293b' }}>Dokumen PDF Terlampir</div>
-                    <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-                      Berkas digital asli yang diunggah oleh Petugas Surat saat pencatatan surat masuk.
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="modal-footer" style={{ justifyContent: 'space-between' }}>
-                <button className="btn btn-secondary" onClick={() => setShowPdfModal(false)}>Tutup</button>
-                <button className="btn btn-primary" onClick={handleDownload}>
-                  Unduh Berkas PDF
-                </button>
+        {/* ─── Riwayat Surat Balasan (Tahap 4) ─── */}
+        {replies.length > 0 && (
+          <div className="card" style={{ marginTop: 24 }}>
+            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, margin: 0 }}>
+                <Send size={16} style={{ color: 'var(--pinus)' }} /> Riwayat Surat Balasan Terkirim / Dibuat ({replies.length})
+              </h2>
+              {(isPetugasOrAdmin || user?.role === 'kepala_bidang') && (
+                <Link
+                  href={`/surat-keluar/baru?smId=${surat.id}${disposisi ? `&disposisiId=${disposisi.id}` : ''}`}
+                  className="btn btn-sm btn-primary"
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12 }}
+                >
+                  <Send size={13} /> Buat Balasan Tambahan
+                </Link>
+              )}
+            </div>
+            <div className="card-body" style={{ padding: 0 }}>
+              <div className="table-container">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th style={{ width: 40 }}>No.</th>
+                      <th>Nomor Surat</th>
+                      <th>Perihal</th>
+                      <th>Tujuan</th>
+                      <th>Tanggal</th>
+                      <th>Status</th>
+                      <th style={{ textAlign: 'right' }}>Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {replies.map((sk, idx) => (
+                      <tr key={sk.id}>
+                        <td>{idx + 1}</td>
+                        <td style={{ fontWeight: 600 }}>
+                          {sk.nomorSurat || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>(Konsep belum terbit)</span>}
+                        </td>
+                        <td>{sk.perihal}</td>
+                        <td>{sk.tujuan}</td>
+                        <td style={{ whiteSpace: 'nowrap' }}>
+                          {new Date(sk.tanggalKirim || sk.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </td>
+                        <td>
+                          <ChipStatus jenis="suratKeluar" status={sk.status} compact />
+                        </td>
+                        <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-ghost"
+                            onClick={() => setPreviewReply(sk)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginRight: 6 }}
+                          >
+                            <Eye size={13} /> Pratinjau
+                          </button>
+                          <Link href={`/surat-keluar/${sk.id}`} className="btn btn-sm btn-secondary">
+                            Detail
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
         )}
+
+        {/* Modal Pratinjau Surat Balasan (Tahap 4 & Tahap 1) */}
+        {previewReply && (
+          <ModalStandar
+            open={true}
+            onClose={() => setPreviewReply(null)}
+            judul={`Pratinjau Surat Keluar Balasan: ${previewReply.nomorSurat || previewReply.perihal}`}
+            size="lg"
+            footerSecondary={
+              <button className="btn btn-ghost" onClick={() => setPreviewReply(null)}>
+                Tutup Pratinjau
+              </button>
+            }
+          >
+            <div style={{ padding: '8px 0' }}>
+              <KonsepSuratPreview
+                surat={previewReply}
+                jenisSurat={state.jenisSurat.find(j => j.id === previewReply.jenisSuratId)}
+                klasifikasi={state.klasifikasi.find(k => k.id === previewReply.klasifikasiId)}
+                penyusun={state.users.find(usr => usr.id === previewReply.penyusunId)}
+                getUser={getUser}
+              />
+            </div>
+          </ModalStandar>
+        )}
+
+        {/* Modal Preview Berkas PDF Surat Masuk */}
+        <ModalStandar
+          open={showPdfModal}
+          onClose={() => setShowPdfModal(false)}
+          judul={`Pratinjau Berkas Lampiran — Agenda: ${surat.nomorAgenda}`}
+          size="lg"
+          footerSecondary={
+            <button className="btn btn-ghost" onClick={() => setShowPdfModal(false)}>
+              Tutup Pratinjau
+            </button>
+          }
+          footerPrimary={
+            <button className="btn btn-primary" onClick={handleDownload}>
+              <Download size={14} aria-hidden="true" /> Unduh Berkas Asli
+            </button>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--latar, #F3F5F4)', padding: '10px 14px', borderRadius: 6, fontSize: 13 }}>
+              <div>
+                <strong>Asal Surat:</strong> {surat.asalSurat} | <strong>Nomor:</strong> {surat.nomorSuratAsal}
+              </div>
+              <span className={`chip ${surat.sifat === 'rahasia' ? 'chip-bahaya' : 'chip-info'}`} style={{ fontSize: 11, fontWeight: 600 }}>
+                {SIFAT_SURAT_LABELS[surat.sifat]}
+              </span>
+            </div>
+
+            <PdfViewerEmbedded
+              fileUrl={surat.berkasUrl || '/docs/sample-surat-masuk.pdf'}
+              judul={`Surat Masuk — ${surat.nomorAgenda}`}
+              metadata={{
+                nomor: surat.nomorAgenda,
+                perihal: surat.perihal,
+                asalSurat: surat.asalSurat,
+                tanggal: new Date(surat.tanggalTerima).toLocaleDateString('id-ID'),
+                sifat: surat.sifat,
+                isiRingkas: `Surat dari ${surat.asalSurat} dengan nomor surat ${surat.nomorSuratAsal} tertanggal ${surat.tanggalSuratAsal}. Diterima di Dinas Pertanian pada ${new Date(surat.tanggalTerima).toLocaleDateString('id-ID')}.`,
+              }}
+              onDownload={handleDownload}
+              height={500}
+            />
+          </div>
+        </ModalStandar>
+
+
       </div>
     </DashboardLayout>
   );

@@ -5,7 +5,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useStore } from '@/lib/store';
 import { SIFAT_SURAT_LABELS, STATUS_SURAT_KELUAR_LABELS } from '@/lib/types';
 import { ChipStatus, BadgeSifat } from '@/components/ui';
-import { Search, Send, Info, RotateCcw } from 'lucide-react';
+import { Search, Send, Info, RotateCcw, PenTool } from 'lucide-react';
 
 type Tab = 'siap_diproses' | 'terkirim' | 'semua';
 
@@ -68,11 +68,16 @@ export default function SuratKeluarPage() {
   return (
     <DashboardLayout>
       <div className="animate-fadeIn">
-        <div className="page-header">
+        <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="page-header-left">
             <h1>Surat Keluar</h1>
             <p>Pemrosesan dan pengiriman surat keluar dinas</p>
           </div>
+          {(user?.role === 'kepala_bidang' || user?.role === 'staf_pelaksana' || user?.role === 'admin') && (
+            <Link href="/surat-keluar/baru" className="btn btn-primary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <PenTool size={15} /> Susun Konsep Surat
+            </Link>
+          )}
         </div>
 
         {/* Info AT-05: Petugas tidak menyusun konsep */}

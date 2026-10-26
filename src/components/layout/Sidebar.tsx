@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useStore } from '@/lib/store';
@@ -8,7 +8,7 @@ import { USER_ROLE_LABELS } from '@/lib/types';
 import {
   LayoutDashboard, MailOpen, FileCheck, Send, Archive,
   Search, Bell, BarChart3, Users, Database, ScrollText,
-  Menu, X, LogOut, ListChecks, ClipboardList
+  Menu, X, LogOut, ListChecks, ClipboardList, FilePen
 } from 'lucide-react';
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -17,6 +17,7 @@ const iconMap: Record<string, React.ReactNode> = {
   FileCheck: <FileCheck />,
   ListChecks: <ListChecks />,
   ClipboardList: <ClipboardList />,
+  FilePen: <FilePen />,
   Send: <Send />,
   Archive: <Archive />,
   Search: <Search />,
@@ -69,6 +70,17 @@ export default function Sidebar() {
   const menuItems = getMenuItems(user.role);
   const unreadCount = getUnreadCount();
 
+  const pendingParafTtdCount = useMemo(() => {
+    if (!user) return 0;
+    if (user.role === 'sekretaris') {
+      return state.suratKeluar.filter((s) => s.status === 'menunggu_paraf').length;
+    }
+    if (user.role === 'kepala_dinas') {
+      return state.suratKeluar.filter((s) => s.status === 'menunggu_ttd').length;
+    }
+    return 0;
+  }, [state.suratKeluar, user.role]);
+
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
   };
@@ -107,7 +119,13 @@ export default function Sidebar() {
               label={item.label}
               icon={item.icon}
               active={activeHref === item.href}
-              badge={item.id === 'notifikasi' ? unreadCount : undefined}
+              badge={
+                item.id === 'notifikasi'
+                  ? unreadCount
+                  : item.id === 'paraf-ttd'
+                  ? pendingParafTtdCount
+                  : undefined
+              }
               onClick={() => setMobileOpen(false)}
             />
           ))}

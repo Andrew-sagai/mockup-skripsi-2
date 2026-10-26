@@ -50,12 +50,12 @@ export default function KepalaDinasDashboard() {
     return state.suratMasuk
       .filter((s) => s.status === 'menunggu_disposisi')
       .sort((a, b) => {
-        // prioritas: segera > segera > penting > rahasia > lain
+        // prioritas: segera > penting > rahasia > umum > biasa
         const pRank = (s: any) => {
           if (s.sifat === 'segera') return 0;
-          if (s.sifat === 'segera') return 1;
-          if (s.sifat === 'penting') return 2;
-          if (s.sifat === 'rahasia') return 3;
+          if (s.sifat === 'penting') return 1;
+          if (s.sifat === 'rahasia') return 2;
+          if (s.sifat === 'umum') return 3;
           return 4;
         };
         const pr = pRank(a) - pRank(b);
@@ -118,7 +118,7 @@ export default function KepalaDinasDashboard() {
         <div className="stat-card danger" id="stat-kd-prioritas">
           <div className="stat-icon danger"><AlertTriangle size={24} aria-hidden="true" /></div>
           <div className="stat-content">
-            <div className="stat-label">Surat Prioritas</div>
+            <div className="stat-label">Surat Prioritas (Segera &amp; Penting)</div>
             <div className="stat-value">{prioritas}</div>
           </div>
         </div>

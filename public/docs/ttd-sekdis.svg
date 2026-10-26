@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 100" width="240" height="100">
+  <!-- Paraf Koordinasi Resmi Sekretaris Dinas (Dr. Ir. Ventje Rantung) -->
+  <g fill="none" stroke="#1e293b" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Inisial V dan R dengan spiral koordinasi -->
+    <path d="M 25 35 L 45 78 L 72 25 C 80 18, 92 20, 88 35 C 82 55, 68 76, 82 74 C 98 72, 118 45, 130 42 C 142 38, 140 54, 132 68 C 125 80, 145 75, 168 62 C 185 52, 202 46, 218 44" />
+    <!-- Coretan garis koordinasi bawah -->
+    <path d="M 52 82 Q 115 72, 195 64" stroke-width="2" />
+  </g>
+</svg>

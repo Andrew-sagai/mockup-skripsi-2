@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 110" width="260" height="110">
+  <!-- Tanda Tangan Resmi Kepala Dinas Pertanian (Feybie F. Pusung) -->
+  <g fill="none" stroke="#1e293b" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Inisial F dan loop utama -->
+    <path d="M 30 75 C 32 40, 48 18, 62 18 C 76 18, 65 52, 45 78 C 35 90, 42 98, 58 92 C 78 85, 110 58, 125 45 C 135 36, 142 42, 136 55 C 128 72, 112 88, 128 85 C 146 82, 170 56, 185 48 C 196 42, 202 48, 198 58 C 192 72, 184 84, 205 78 C 220 74, 238 60, 246 54" />
+    <!-- Coretan aksen atas -->
+    <path d="M 50 28 Q 75 22, 105 26" stroke-width="2.2" />
+    <!-- Garis bawah penutup khas pejabat -->
+    <path d="M 45 92 Q 135 78, 235 70" stroke-width="2.4" />
+    <circle cx="242" cy="69" r="1.8" fill="#1e293b" />
+  </g>
+</svg>

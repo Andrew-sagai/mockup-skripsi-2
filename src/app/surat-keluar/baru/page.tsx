@@ -6,7 +6,8 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useStore } from '@/lib/store';
 import { useBusinessLogic } from '@/lib/api';
 import { getTemplateNaskah } from '@/lib/templates';
-import { ArrowLeft, Save, Send, Sparkles, AlertCircle, Info, FileText } from 'lucide-react';
+import { ArrowLeft, Save, Send, Sparkles, AlertCircle, Info, FileText, AlertTriangle, Eye, Hash, Lock } from 'lucide-react';
+import { ModalStandar, KonsepSuratPreview, ChipStatus } from '@/components/ui';
 
 // ─── Komponen utama di dalam Suspense ──────────────────────
 function SuratKeluarBaruContent() {
@@ -25,6 +26,12 @@ function SuratKeluarBaruContent() {
     ? state.tindakLanjut.filter(t => t.disposisiId === disposisiId && t.status !== 'dikembalikan')
     : [];
 
+  // Daftar surat balasan yang sudah pernah dikirim/dibuat untuk surat masuk ini (Tahap 4)
+  const existingBalasan = smAsal
+    ? state.suratKeluar.filter(sk => sk.suratMasukAsalId === smAsal.id || sk.refSuratMasukId === smAsal.id)
+    : [];
+  const [previewSk, setPreviewSk] = useState<any>(null);
+
   // Banner revisi (Perlu Revisi dari Sekretaris atau Kadis)
   const persetujuan = state.persetujuan || [];
 
@@ -33,6 +40,7 @@ function SuratKeluarBaruContent() {
     ? state.unitKerja.find(u => u.id === user.unitKerjaId)
     : null;
 
+  const [selectedSmId, setSelectedSmId] = useState<string>(smId || '');
   const [form, setForm] = useState({
     perihal: '',
     tujuan: '',
@@ -43,6 +51,41 @@ function SuratKeluarBaruContent() {
   });
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  // Perhitungan nomor urut agenda surat keluar otomatis (+1 tahun berjalan, reset ke 1 setiap tahun baru)
+  const currentYear = new Date().getFullYear();
+  const romanMonth = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII'][new Date().getMonth()];
+  const skTahunIni = state.suratKeluar.filter((s) => {
+    const tgl = s.tanggalKirim || s.createdAt;
+    const thn = tgl ? new Date(tgl).getFullYear() : new Date().getFullYear();
+    return thn === currentYear;
+  });
+
+  let maxUrutKeluar = 0;
+  for (const s of skTahunIni) {
+    let num = s.nomorUrut;
+    if (!num || isNaN(num)) {
+      if (s.nomorSurat) {
+        const parts = s.nomorSurat.split('/');
+        if (parts.length >= 2) {
+          const parsed = parseInt(parts[1], 10);
+          if (!isNaN(parsed)) num = parsed;
+        }
+      }
+    }
+    if (num && num > maxUrutKeluar) maxUrutKeluar = num;
+  }
+
+  const skCounter = state.nomorSuratCounter?.find(
+    (c) => c.tahun === currentYear && (c.klasifikasiKode === 'SURAT_KELUAR' || !c.klasifikasiKode)
+  );
+  if (skCounter && skCounter.counter > maxUrutKeluar) {
+    maxUrutKeluar = skCounter.counter;
+  }
+  const nextUrutKeluar = maxUrutKeluar + 1;
+
+  const selectedKlas = state.klasifikasi.find((k) => k.id === form.klasifikasiId);
+  const selectedKlasKode = selectedKlas?.kode || '[Kode Klasifikasi]';
 
   const sortedJenisSurat = [...state.jenisSurat.filter(j => j.aktif)].sort((a, b) => {
     if (a.utama && !b.utama) return -1;
@@ -77,7 +120,8 @@ function SuratKeluarBaruContent() {
     }
     setSaving(true);
     try {
-      apiAjukanSuratKeluar({ ...form, suratMasukAsalId: smAsal?.id } as any, asDraft);
+      const linkedSmId = smAsal?.id || selectedSmId || undefined;
+      apiAjukanSuratKeluar({ ...form, suratMasukAsalId: linkedSmId, refSuratMasukId: linkedSmId } as any, asDraft);
       router.push('/surat-keluar');
     } catch (err: any) {
       setErrorMsg(err.message);
@@ -103,6 +147,94 @@ function SuratKeluarBaruContent() {
           </div>
         </div>
 
+        {/* ─── Peringatan Balasan Sebelumnya (Tahap 4) ─── */}
+        {smAsal && existingBalasan.length > 0 && (
+          <div style={{
+            background: '#fffbeb',
+            border: '1.5px solid #f59e0b',
+            borderRadius: 8,
+            padding: '14px 18px',
+            marginBottom: 20,
+            boxShadow: '0 2px 8px rgba(245, 158, 11, 0.08)'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+              <AlertTriangle size={22} style={{ color: '#d97706', flexShrink: 0, marginTop: 2 }} aria-hidden="true" />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: '#92400e', marginBottom: 4 }}>
+                  Perhatian: Surat masuk ini sudah memiliki {existingBalasan.length} surat balasan sebelumnya
+                </div>
+                <div style={{ fontSize: 13, color: '#78350f', lineHeight: 1.5, marginBottom: 10 }}>
+                  {existingBalasan.length === 1 ? (
+                    <>
+                      Surat ini sudah memiliki 1 balasan terkirim/dibuat pada{' '}
+                      <strong>
+                        {existingBalasan[0].tanggalKirim
+                          ? new Date(existingBalasan[0].tanggalKirim).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })
+                          : new Date(existingBalasan[0].createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </strong>
+                      {existingBalasan[0].nomorSurat ? (
+                        <> dengan nomor <strong>{existingBalasan[0].nomorSurat}</strong></>
+                      ) : (
+                        ' (status konsep/draf)'
+                      )}
+                      . Anda akan membuat <strong>balasan tambahan (ke-2)</strong>.
+                    </>
+                  ) : (
+                    <>
+                      Surat masuk ini telah memiliki {existingBalasan.length} surat balasan terdaftar. Anda sedang menyusun <strong>balasan tambahan (ke-{existingBalasan.length + 1})</strong>.
+                    </>
+                  )}
+                </div>
+
+                {/* Tabel Ringkas Surat Balasan Sebelumnya */}
+                <div style={{ background: '#fff', border: '1px solid #fde68a', borderRadius: 6, overflow: 'hidden' }}>
+                  <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: '#fef3c7', textAlign: 'left', borderBottom: '1px solid #fde68a' }}>
+                        <th style={{ padding: '6px 10px', color: '#92400e', width: 36 }}>No.</th>
+                        <th style={{ padding: '6px 10px', color: '#92400e' }}>Nomor Surat</th>
+                        <th style={{ padding: '6px 10px', color: '#92400e' }}>Tanggal</th>
+                        <th style={{ padding: '6px 10px', color: '#92400e' }}>Perihal</th>
+                        <th style={{ padding: '6px 10px', color: '#92400e' }}>Status</th>
+                        <th style={{ padding: '6px 10px', color: '#92400e', textAlign: 'right' }}>Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {existingBalasan.map((sk, idx) => (
+                        <tr key={sk.id} style={{ borderBottom: idx < existingBalasan.length - 1 ? '1px solid #fef3c7' : 'none' }}>
+                          <td style={{ padding: '6px 10px', color: '#78350f' }}>{idx + 1}</td>
+                          <td style={{ padding: '6px 10px', fontWeight: 600, color: '#111827' }}>
+                            {sk.nomorSurat || <em style={{ color: '#6b7280' }}>(Konsep belum terbit)</em>}
+                          </td>
+                          <td style={{ padding: '6px 10px', color: '#4b5563', whiteSpace: 'nowrap' }}>
+                            {new Date(sk.tanggalKirim || sk.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </td>
+                          <td style={{ padding: '6px 10px', color: '#374151', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {sk.perihal}
+                          </td>
+                          <td style={{ padding: '6px 10px' }}>
+                            <ChipStatus jenis="suratKeluar" status={sk.status} compact />
+                          </td>
+                          <td style={{ padding: '6px 10px', textAlign: 'right' }}>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => setPreviewSk(sk)}
+                              style={{ fontSize: 11, padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                            >
+                              <Eye size={12} /> Pratinjau
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div style={{ display: 'grid', gridTemplateColumns: smAsal ? '1fr 380px' : '1fr', gap: 24, alignItems: 'start' }}>
 
           {/* ─── Form Utama ─────────────────────────────── */}
@@ -122,7 +254,7 @@ function SuratKeluarBaruContent() {
                   <Info size={14} aria-hidden="true" />
                   <span>
                     Surat ini merupakan jawaban atas <strong>{smAsal.nomorAgenda}</strong> — {smAsal.perihal}{' '}
-                    dari <em>{smAsal.asalSurat}</em>. Nomor agenda akan terhubung secara otomatis (K-1).
+                    dari <em>{smAsal.asalSurat}</em>. Nomor agenda terhubung secara otomatis (relasi 1 surat masuk ke banyak balasan).
                   </span>
                 </div>
               )}
@@ -137,6 +269,74 @@ function SuratKeluarBaruContent() {
               )}
 
               <form onSubmit={e => handleSubmit(e, false)}>
+                {/* Opsi Tautkan ke Surat Masuk Asal jika surat keluar merupakan surat balasan */}
+                {!smAsal && (
+                  <div className="form-group" style={{ marginBottom: 20 }}>
+                    <label className="form-label">
+                      Tautkan ke Surat Masuk Asal (Surat Balasan / Jawaban)
+                      <span style={{ fontSize: 11, color: 'var(--tinta-redup)', marginLeft: 8, fontWeight: 400 }}>(Opsional)</span>
+                    </label>
+                    <select
+                      className="form-select"
+                      id="select-sm-asal-sk"
+                      value={selectedSmId}
+                      onChange={e => setSelectedSmId(e.target.value)}
+                    >
+                      <option value="">— Bukan Surat Balasan / Surat Mandiri —</option>
+                      {state.suratMasuk.map(sm => (
+                        <option key={sm.id} value={sm.id}>
+                          No. Agenda {sm.nomorAgenda}: {sm.perihal} (Pengirim: {sm.asalSurat})
+                        </option>
+                      ))}
+                    </select>
+                    <div className="form-hint">
+                      Pilih jika surat keluar ini merupakan jawaban/tanggapan atas surat masuk pada buku agenda.
+                    </div>
+                  </div>
+                )}
+
+                {/* Field Nomor Urut Agenda & Penomoran Resmi (Otomatis & Read-Only) */}
+                <div className="form-group" style={{ background: 'var(--latar)', padding: '14px 18px', borderRadius: 8, border: '1px solid var(--garis)', marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <label className="form-label" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Hash size={16} style={{ color: 'var(--pinus)' }} aria-hidden="true" />
+                      <strong>Nomor Agenda / No. Urut Surat Keluar</strong>
+                      <span style={{ fontSize: 11, background: '#e0f2fe', color: '#0369a1', padding: '2px 8px', borderRadius: 12, fontWeight: 600 }}>
+                        Otomatis Saat Tanda Tangan Kadis
+                      </span>
+                    </label>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <input
+                        className="form-input"
+                        value={nextUrutKeluar}
+                        readOnly
+                        style={{
+                          width: 80,
+                          textAlign: 'center',
+                          fontFamily: 'monospace',
+                          fontWeight: 800,
+                          fontSize: 16,
+                          color: 'var(--pinus)',
+                          background: '#f1f5f9',
+                          cursor: 'not-allowed',
+                        }}
+                      />
+                      <Lock size={14} style={{ color: 'var(--tinta-redup)' }} aria-hidden="true" />
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--tinta-redup)', lineHeight: 1.4 }}>
+                      Pola Format Resmi Tata Naskah Dinas:{' '}
+                      <code style={{ fontFamily: 'monospace', fontWeight: 700, color: '#0369a1', background: '#fff', padding: '2px 8px', borderRadius: 4, border: '1px solid var(--garis)' }}>
+                        {selectedKlasKode}/{nextUrutKeluar}/DISTAN-MS/{romanMonth}/{currentYear}
+                      </code>
+                      <div style={{ marginTop: 2, fontSize: 11 }}>
+                        Nomor surat resmi dibangkitkan otomatis dalam satu transaksi penguncian baris (row locking) saat Kepala Dinas menyetujui surat.
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="form-group">
                   <label className="form-label">Perihal <span className="required">*</span></label>
                   <input
@@ -197,15 +397,21 @@ function SuratKeluarBaruContent() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Sifat Surat</label>
+                  <label className="form-label">Sifat Surat <span className="required">*</span></label>
                   <select
                     className="form-select"
                     id="select-sifat-sk"
                     value={form.sifat}
                     onChange={e => setForm({ ...form, sifat: e.target.value })}
                   >
-                    {['biasa', 'penting', 'segera', 'segera', 'rahasia'].map(s => (
-                      <option key={s} value={s}>{s.replace('_', ' ')}</option>
+                    {[
+                      { key: 'biasa', label: 'Biasa' },
+                      { key: 'umum', label: 'Umum/Pemberitahuan' },
+                      { key: 'penting', label: 'Penting' },
+                      { key: 'segera', label: 'Segera' },
+                      { key: 'rahasia', label: 'Rahasia' },
+                    ].map(s => (
+                      <option key={s.key} value={s.key}>{s.label}</option>
                     ))}
                   </select>
                 </div>
@@ -269,10 +475,11 @@ function SuratKeluarBaruContent() {
                         ['Asal', smAsal.asalSurat],
                         ['Perihal', smAsal.perihal],
                         ['No. Surat', smAsal.nomorSuratAsal],
+                        ['Sudah Dibalas', `${existingBalasan.length}x`],
                       ].map(([label, val]) => (
                         <tr key={String(label)} style={{ borderBottom: '1px solid var(--garis)' }}>
                           <td style={{ padding: '5px 0', color: 'var(--tinta-redup)', width: '38%' }}>{label}</td>
-                          <td style={{ padding: '5px 0', fontWeight: 500 }}>{val}</td>
+                          <td style={{ padding: '5px 0', fontWeight: label === 'Sudah Dibalas' && existingBalasan.length > 0 ? 700 : 500, color: label === 'Sudah Dibalas' && existingBalasan.length > 0 ? 'var(--primary-700)' : 'inherit' }}>{val}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -308,6 +515,31 @@ function SuratKeluarBaruContent() {
             </div>
           )}
         </div>
+
+        {/* Modal Pratinjau Surat Balasan Sebelumnya (Tahap 4 & Tahap 1) */}
+        {previewSk && (
+          <ModalStandar
+            open={true}
+            onClose={() => setPreviewSk(null)}
+            judul={`Pratinjau Surat Balasan Sebelumnya: ${previewSk.nomorSurat || previewSk.perihal}`}
+            size="lg"
+            footerSecondary={
+              <button className="btn btn-ghost" onClick={() => setPreviewSk(null)}>
+                Tutup Pratinjau
+              </button>
+            }
+          >
+            <div style={{ padding: '8px 0' }}>
+              <KonsepSuratPreview
+                surat={previewSk}
+                jenisSurat={state.jenisSurat.find(j => j.id === previewSk.jenisSuratId)}
+                klasifikasi={state.klasifikasi.find(k => k.id === previewSk.klasifikasiId)}
+                penyusun={state.users.find(usr => usr.id === previewSk.penyusunId)}
+                getUser={(uid) => state.users.find(u => u.id === uid)}
+              />
+            </div>
+          </ModalStandar>
+        )}
       </div>
     </DashboardLayout>
   );

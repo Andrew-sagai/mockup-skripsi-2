@@ -60,12 +60,11 @@ export interface SifatDef {
 }
 
 export const SIFAT_DEFS: Record<SifatSurat, SifatDef> = {
-  biasa:           { label: 'Biasa',           tone: 'netral', icon: null },
-  umum:            { label: 'Umum',            tone: 'netral', icon: null },
-  pemberitahuan:   { label: 'Pemberitahuan',   tone: 'netral', icon: null },
-  penting:         { label: 'Penting',         tone: 'segera', icon: 'CircleAlert' },
-  segera:          { label: 'Segera',          tone: 'segera', icon: 'Timer' },
-  rahasia:         { label: 'Rahasia',         tone: 'bahaya', icon: 'Lock' },
+  biasa:   { label: 'Biasa',              tone: 'netral', icon: null },
+  umum:    { label: 'Umum/Pemberitahuan', tone: 'netral', icon: null },
+  penting: { label: 'Penting',            tone: 'segera', icon: 'CircleAlert' },
+  segera:  { label: 'Segera',             tone: 'segera', icon: 'Timer' },
+  rahasia: { label: 'Rahasia',            tone: 'bahaya', icon: 'Lock' },
 };
 
 // --- Batas Waktu ---

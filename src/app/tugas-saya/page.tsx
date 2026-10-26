@@ -3,12 +3,11 @@ import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
-import { urutkanTerbaru } from '@/lib/utils';
 import { getBatasWaktuState } from '@/lib/batas-waktu';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import { FileCheck, Shield, AlertCircle, FileText, Download } from 'lucide-react';
+import { BadgeSifat, ChipStatus, PenandaBatasWaktu, ModalStandar, PdfViewerEmbedded } from '@/components/ui';
 import { JENIS_INSTRUKSI_LABELS } from '@/lib/types';
-import { FileCheck, Shield, AlertCircle } from 'lucide-react';
-import { BadgeSifat, ChipStatus, PenandaBatasWaktu } from '@/components/ui';
 
 const STATUS_OPTIONS = [
   { value: 'semua', label: 'Semua' },
@@ -23,6 +22,7 @@ export default function TugasSayaPage() {
   const { state } = useStore();
   const router = useRouter();
   const [filterStatus, setFilterStatus] = useState('semua');
+  const [previewSm, setPreviewSm] = useState<any>(null);
 
   const user = state.currentUser;
 
@@ -58,9 +58,9 @@ export default function TugasSayaPage() {
     }).filter(p => p.d); // must have valid disposisi
 
     if (filterStatus !== 'semua') {
-      return urutkanTerbaru(mappedPenugasan, (p) => p.d?.createdAt).filter(p => p.derivedStatus === filterStatus);
+      return mappedPenugasan.filter(p => p.derivedStatus === filterStatus);
     }
-    return urutkanTerbaru(mappedPenugasan, (p) => p.d?.createdAt);
+    return mappedPenugasan;
   }, [myPenugasan, filterStatus, state.disposisi, state.tindakLanjut, user]);
 
   // Access Control
@@ -149,9 +149,34 @@ export default function TugasSayaPage() {
                       )}
                     </td>
                     <td>
-                      <ChipStatus jenis="disposisi" status={p.derivedStatus} compact />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-start' }}>
+                        <ChipStatus jenis="disposisi" status={p.derivedStatus} compact />
+                        {(() => {
+                          const tls = state.tindakLanjut.filter(t => t.disposisiId === p.disposisiId);
+                          if (tls.length > 1) {
+                            return (
+                              <span className="badge badge-info" style={{ fontSize: 10, fontWeight: 700 }}>
+                                Revisi ke-{tls.length}
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
                     </td>
-                    <td style={{ textAlign: 'right' }}>
+                    <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {sm && (
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-ghost"
+                          onClick={() => setPreviewSm(sm)}
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, marginRight: 6 }}
+                          title="Lihat Berkas Asli Surat Masuk"
+                        >
+                          <FileText size={14} style={{ color: 'var(--pinus, #2A7356)' }} aria-hidden="true" />
+                          <span>Berkas</span>
+                        </button>
+                      )}
                       {['diteruskan_staf', 'sedang_dikerjakan', 'perlu_perbaikan'].includes(p.derivedStatus) ? (
                         <Link href={`/disposisi/${p.disposisiId}`} className="btn btn-sm btn-secondary">Kerjakan</Link>
                       ) : (
@@ -165,6 +190,61 @@ export default function TugasSayaPage() {
           </table>
         </div>
       </div>
+
+      {/* Modal Pratinjau Berkas PDF Surat Masuk untuk Staf Pelaksana */}
+      {previewSm && (
+        <ModalStandar
+          open={!!previewSm}
+          onClose={() => setPreviewSm(null)}
+          judul={`Pratinjau Berkas Surat Masuk — Agenda: ${previewSm.nomorAgenda || '—'}`}
+          size="lg"
+          footerSecondary={
+            <button className="btn btn-ghost" onClick={() => setPreviewSm(null)}>
+              Tutup Pratinjau
+            </button>
+          }
+          footerPrimary={
+            <button
+              className="btn btn-primary"
+              onClick={() => {
+                const link = document.createElement('a');
+                link.href = previewSm.berkasUrl || '/docs/sample-surat-masuk.pdf';
+                link.download = `Surat_Masuk_${(previewSm.nomorAgenda || 'berkas').replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }}
+            >
+              <Download size={14} aria-hidden="true" /> Unduh Berkas Asli
+            </button>
+          }
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--latar, #F3F5F4)', padding: '10px 14px', borderRadius: 6, fontSize: 13 }}>
+              <div>
+                <strong>Asal Surat:</strong> {previewSm.asalSurat} | <strong>Nomor:</strong> {previewSm.nomorSuratAsal}
+              </div>
+              <span className={`chip ${previewSm.sifat === 'rahasia' ? 'chip-bahaya' : 'chip-info'}`} style={{ fontSize: 11, fontWeight: 600, textTransform: 'capitalize' }}>
+                {previewSm.sifat}
+              </span>
+            </div>
+
+            <PdfViewerEmbedded
+              fileUrl={previewSm.berkasUrl || '/docs/sample-surat-masuk.pdf'}
+              judul={`Surat Masuk — ${previewSm.nomorAgenda || 'Berkas Asli'}`}
+              metadata={{
+                nomor: previewSm.nomorAgenda,
+                perihal: previewSm.perihal,
+                asalSurat: previewSm.asalSurat,
+                tanggal: previewSm.tanggalTerima ? new Date(previewSm.tanggalTerima).toLocaleDateString('id-ID') : undefined,
+                sifat: previewSm.sifat,
+                isiRingkas: `Surat masuk dari ${previewSm.asalSurat} perihal ${previewSm.perihal} yang menjadi dasar penugasan staf.`,
+              }}
+              height={520}
+            />
+          </div>
+        </ModalStandar>
+      )}
     </DashboardLayout>
   );
 }

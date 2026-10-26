@@ -1,7 +1,8 @@
 import { useStore } from './store';
 import {
   SuratMasuk, Disposisi, JenisInstruksi, JENIS_INSTRUKSI_LABELS, SuratKeluar, UserRole,
-  InstruksiDisposisi, DisposisiTujuan, SifatSurat, USER_ROLE_LABELS
+  InstruksiDisposisi, DisposisiTujuan, SifatSurat, USER_ROLE_LABELS,
+  KategoriDataMaster, DataMasterItem
 } from './types';
 
 export function useBusinessLogic() {
@@ -23,7 +24,7 @@ export function useBusinessLogic() {
   const autoArchive = (
     jenisSurat: 'masuk' | 'keluar',
     suratId: string,
-    kodeArsip: string,
+    nomorAgendaOrUrut: string | number,
     berkasUrl: string,
     perihal: string,
     nomorSurat: string,
@@ -31,7 +32,7 @@ export function useBusinessLogic() {
     tahun: number,
     jenisSuratId?: string,
     extra?: {
-      statusArsip?: 'disposisi' | 'selesai' | 'terkirim';
+      statusArsip?: 'disposisi' | 'selesai' | 'terkirim' | 'menunggu_verifikasi' | 'diarsipkan';
       laporanHasil?: string;
       berkasLaporanUrl?: string;
       tanggalSelesai?: string;
@@ -41,6 +42,17 @@ export function useBusinessLogic() {
       isSuratBalasan?: boolean;
     }
   ) => {
+    const klas = state.klasifikasi.find(k => k.id === klasifikasiId);
+    const klasKode = klas?.kode || '5.20';
+    let cleanAgenda = String(nomorAgendaOrUrut || '1');
+    if (cleanAgenda.includes('/')) {
+      const parts = cleanAgenda.split('/');
+      cleanAgenda = parts[parts.length - 1];
+    }
+    cleanAgenda = cleanAgenda.replace(/^0+/, '') || '1';
+    // Pola Standar Proposal: [Kode Klasifikasi]/[Tahun]/[Nomor Agenda] (Contoh: "5.20/2026/83" atau "5.22/2026/240")
+    const kodeArsip = `${klasKode}/${tahun}/${cleanAgenda}`;
+
     const existing = state.arsip?.find(a =>
       jenisSurat === 'masuk' ? a.suratMasukId === suratId : a.suratKeluarId === suratId
     );
@@ -50,7 +62,7 @@ export function useBusinessLogic() {
         type: 'UPDATE_ARSIP',
         payload: {
           id: existing.id,
-          ...(kodeArsip ? { kodeArsip } : {}),
+          kodeArsip,
           ...(berkasUrl ? { berkasUrl } : {}),
           ...(perihal ? { perihal } : {}),
           ...(nomorSurat && nomorSurat !== '-' ? { nomorSurat } : {}),
@@ -82,7 +94,7 @@ export function useBusinessLogic() {
           tahun,
           klasifikasiId,
           createdAt: new Date().toISOString(),
-          statusArsip: extra?.statusArsip || (jenisSurat === 'keluar' ? 'terkirim' : 'selesai'),
+          statusArsip: extra?.statusArsip || (jenisSurat === 'keluar' ? 'menunggu_verifikasi' : 'menunggu_verifikasi'),
           laporanHasil: extra?.laporanHasil,
           berkasLaporanUrl: extra?.berkasLaporanUrl,
           tanggalSelesai: extra?.tanggalSelesai,
@@ -108,7 +120,7 @@ export function useBusinessLogic() {
     if (!jenis || !jenis.aktif) {
       throw new Error("Jenis surat tidak valid atau sudah nonaktif.");
     }
-    
+
     // Berkas dapat diunggah nyata atau disimulasikan sesuai mockup
     let berkasUrl = '/docs/mock-uploaded.pdf';
     if (file) {
@@ -120,27 +132,79 @@ export function useBusinessLogic() {
     }
 
     const today = new Date();
-    const currentYearStr = today.getFullYear().toString();
-    const suratTahunIni = state.suratMasuk.filter(s => s.nomorAgenda.includes(`-${currentYearStr}-`));
+    const tglTerimaObj = data.tanggalTerima ? new Date(data.tanggalTerima) : today;
+    const tahunBuku = isNaN(tglTerimaObj.getFullYear()) ? today.getFullYear() : tglTerimaObj.getFullYear();
+    
+    // Filter surat masuk pada tahun buku berjalan
+    const suratTahunIni = state.suratMasuk.filter(s => {
+      const tgl = s.tanggalTerima || s.createdAt;
+      const thn = tgl ? new Date(tgl).getFullYear() : today.getFullYear();
+      return thn === tahunBuku;
+    });
     
     let maxNumber = 0;
     for (const s of suratTahunIni) {
-      const parts = s.nomorAgenda.split('-');
-      if (parts.length >= 3) {
-        const num = parseInt(parts[2], 10);
-        if (!isNaN(num) && num > maxNumber) {
-          maxNumber = num;
+      let num = s.nomorUrut;
+      if (!num || isNaN(num)) {
+        const parsed = parseInt(s.nomorAgenda, 10);
+        if (!isNaN(parsed)) {
+          num = parsed;
+        } else {
+          const match = s.nomorAgenda.match(/\d+/);
+          if (match) num = parseInt(match[0], 10);
         }
       }
+      if (num && num > maxNumber) {
+        maxNumber = num;
+      }
     }
+
+    // Periksa tabel counter tahun buku berjalan jika ada
+    const smCounter = state.nomorSuratCounter?.find(c => c.tahun === tahunBuku && (c.klasifikasiKode === 'SURAT_MASUK' || !c.klasifikasiKode));
+    if (smCounter && smCounter.counter > maxNumber) {
+      maxNumber = smCounter.counter;
+    }
+
     const nextNumber = maxNumber + 1;
-    const agendaNo = `AGD-${currentYearStr}-${String(nextNumber).padStart(4, '0')}`;
+    const finalUrut = (data as any).nomorUrut || (data.nomorAgenda ? parseInt(data.nomorAgenda, 10) : nextNumber);
+
+    if (isNaN(finalUrut) || finalUrut <= 0) {
+      throw new Error("Nomor agenda harus berupa angka positif.");
+    }
+
+    // Validasi pencegahan nomor agenda duplikat pada tahun yang sama
+    const isDuplicate = suratTahunIni.some(s => {
+      const sUrut = s.nomorUrut || parseInt(s.nomorAgenda, 10);
+      return sUrut === finalUrut;
+    });
+    if (isDuplicate) {
+      throw new Error(`Nomor agenda ${finalUrut} sudah terdaftar pada buku tahun ${tahunBuku}. Nomor agenda tidak boleh duplikat.`);
+    }
+
+    const agendaNo = String(finalUrut);
+
+    // Otomatisasi nomor petunjuk (tanggal terima format d/m/yy sesuai buku fisik KIKY)
+    const dDate = tglTerimaObj.getDate();
+    const dMonth = tglTerimaObj.getMonth() + 1;
+    const dYearShort = String(tahunBuku).slice(-2);
+    const petunjukAuto = `${dDate}/${dMonth}/${dYearShort}`;
+    const nomorPetunjuk = (data as any).nomorPetunjuk || petunjukAuto;
     
+    // Perbarui counter di state
+    dispatch({
+      type: 'UPDATE_COUNTER',
+      payload: { tahun: tahunBuku, klasifikasiKode: 'SURAT_MASUK', counter: finalUrut }
+    });
+
     const suratId = generateId('sm');
     const newSurat: SuratMasuk = {
       id: suratId,
       nomorAgenda: agendaNo,
-      tanggalTerima: new Date(data.tanggalTerima).toISOString(),
+      nomorUrut: finalUrut,
+      nomorBerkas: (data as any).nomorBerkas || '',
+      nomorPetunjuk: nomorPetunjuk,
+      nomorPaket: (data as any).nomorPaket || '',
+      tanggalTerima: tglTerimaObj.toISOString().slice(0, 10),
       asalSurat: data.asalSurat,
       nomorSuratAsal: data.nomorSuratAsal,
       tanggalSuratAsal: data.tanggalSuratAsal,
@@ -159,7 +223,7 @@ export function useBusinessLogic() {
     dispatch({ type: 'ADD_RIWAYAT', payload: {
       id: generateId('r'), suratMasukId: suratId, status: 'Diagenda',
       pelakuId: user.id, waktu: today.toISOString(),
-      catatan: `Surat dari ${data.asalSurat} (Jenis: ${jenis.nama}) dicatat dan diagendakan dengan nomor ${agendaNo} oleh ${user.nama}`
+      catatan: `Surat dari ${data.asalSurat} (Jenis: ${jenis.nama}) dicatat dan diagendakan dengan nomor agenda ${agendaNo} oleh ${user.nama}`
     }});
     dispatch({ type: 'ADD_LOG', payload: {
       id: generateId('la'), userId: user.id, aksi: 'Catat Surat Masuk',
@@ -239,7 +303,7 @@ export function useBusinessLogic() {
     autoArchive(
       'masuk',
       suratMasukId,
-      `ARS-M-${today.getFullYear()}/${surat.nomorAgenda || dispId}`,
+      surat.nomorAgenda || '1',
       surat.berkasUrl,
       surat.perihal,
       surat.nomorSuratAsal,
@@ -408,7 +472,7 @@ export function useBusinessLogic() {
       autoArchive(
         'masuk',
         smSurat.id,
-        `ARS-M-${today.getFullYear()}/${smSurat.nomorAgenda || dispId}`,
+        smSurat.nomorAgenda || '1',
         smSurat.berkasUrl,
         smSurat.perihal,
         smSurat.nomorSuratAsal,
@@ -437,11 +501,15 @@ export function useBusinessLogic() {
     if (!bidangMatch) throw new Error("Akses ditolak: Disposisi ini bukan untuk bidang Anda.");
 
     const today = new Date();
+    const parafSnapshot = `Paraf: ${user.nama.split(' ')[0] || user.nama}`;
     const updatedBidangTujuan = disp.bidangTujuan.map(b => 
       b.unitKerjaId === user.unitKerjaId ? {
         ...b,
         statusTerima: 'diterima' as const,
         waktuTerima: today.toISOString(),
+        namaPenerimaSnapshot: user.nama,
+        parafPenerimaanSnapshot: parafSnapshot,
+        waktuParafPenerimaan: today.toISOString(),
         statusProses: 'diterima_bidang' as const
       } : b
     );
@@ -604,9 +672,14 @@ export function useBusinessLogic() {
       b.statusProses === 'ditindak_langsung' || b.statusProses === 'selesai'
     );
 
+    const prevTL = state.tindakLanjut.filter(t => t.disposisiId === dispId);
+    const nomorRevisi = prevTL.length + 1;
+
     dispatch({ type: 'ADD_TINDAK_LANJUT', payload: {
       id: generateId('tl'), disposisiId: dispId, pelakuId: user.id, uraianHasil,
-      berkasUrl: file ? '/docs/tl-uploaded.pdf' : undefined, status: 'disetujui', createdAt: today.toISOString()
+      berkasUrl: file ? '/docs/tl-uploaded.pdf' : undefined, status: 'disetujui',
+      nomorRevisi,
+      createdAt: today.toISOString()
     }});
     dispatch({ type: 'UPDATE_DISPOSISI', payload: {
       id: dispId,
@@ -636,7 +709,7 @@ export function useBusinessLogic() {
       autoArchive(
         'masuk',
         sm.id,
-        `ARS-M-${today.getFullYear()}/${sm.nomorAgenda || dispId}`,
+        sm.nomorAgenda || '1',
         sm.berkasUrl,
         sm.perihal,
         sm.nomorSuratAsal,
@@ -703,9 +776,14 @@ export function useBusinessLogic() {
       b.diteruskanKe === user.id ? { ...b, statusProses: 'menunggu_pemeriksaan' as const } : b
     );
 
+    const prevTL = state.tindakLanjut.filter(t => t.disposisiId === dispId);
+    const nomorRevisi = prevTL.length + 1;
+
     dispatch({ type: 'ADD_TINDAK_LANJUT', payload: {
       id: generateId('tl'), disposisiId: dispId, penugasanStafId: penugasan.id, pelakuId: user.id,
-      uraianHasil, berkasUrl: file ? '/docs/tl-staf.pdf' : undefined, status: 'dilaporkan', createdAt: today.toISOString()
+      uraianHasil, berkasUrl: file ? '/docs/tl-staf.pdf' : undefined, status: 'dilaporkan',
+      nomorRevisi,
+      createdAt: today.toISOString()
     }});
     // Bab 4 Poin 7: Status penugasan menjadi 'menunggu_pemeriksaan', BUKAN 'selesai'!
     dispatch({ type: 'UPDATE_PENUGASAN', payload: { id: penugasan.id, status: 'menunggu_pemeriksaan' as any }});
@@ -756,20 +834,28 @@ export function useBusinessLogic() {
         b.statusProses === 'selesai' || b.statusProses === 'ditindak_langsung'
       );
 
-      const newDispStatus = allFinished ? 'selesai' : 'diterima_bidang';
+      const butuhJawaban = Boolean((setuju && perluSuratJawaban) || disp?.perluSuratJawaban);
+      const adaBalasanTerkirim = state.suratKeluar.some(sk =>
+        (sk.suratMasukAsalId === disp?.suratMasukId || sk.refSuratMasukId === disp?.suratMasukId) &&
+        sk.status === 'terkirim'
+      );
+
+      // Surat masuk selesai jika SELURUH disposisi bidang selesai (dan surat balasan terkirim jika butuh jawaban)
+      const canCloseSuratMasuk = allFinished && (!butuhJawaban || adaBalasanTerkirim);
+      const newDispStatus = allFinished ? (butuhJawaban && !adaBalasanTerkirim ? 'diterima_bidang' : 'selesai') : 'diterima_bidang';
 
       dispatch({ type: 'UPDATE_DISPOSISI', payload: {
         id: tl.disposisiId,
         bidangTujuan: updatedBidangTujuan,
         status: newDispStatus,
-        perluSuratJawaban: setuju && perluSuratJawaban ? true : undefined,
+        perluSuratJawaban: butuhJawaban ? true : undefined,
         updatedAt: today.toISOString()
       }});
-      if (allFinished) {
+      if (canCloseSuratMasuk) {
         dispatch({ type: 'UPDATE_SURAT_MASUK', payload: { id: disp!.suratMasukId, status: 'selesai', updatedAt: today.toISOString() }});
-        // B-04: Pass statusArsip 'selesai' agar arsip yang sudah ada (status: disposisi) ter-update
-        if (sm) autoArchive('masuk', sm.id, `ARS-M-${today.getFullYear()}/${sm.nomorAgenda || sm.id}`, sm.berkasUrl, sm.perihal, sm.nomorSuratAsal, sm.klasifikasiId, today.getFullYear(), sm.jenisSuratId, {
-          statusArsip: 'selesai',
+        // Entri Arsip Digital dibuat untuk diverifikasi kode klasifikasinya oleh Petugas Surat
+        if (sm) autoArchive('masuk', sm.id, sm.nomorAgenda || '1', sm.berkasUrl, sm.perihal, sm.nomorSuratAsal, sm.klasifikasiId, today.getFullYear(), sm.jenisSuratId, {
+          statusArsip: 'menunggu_verifikasi',
           laporanHasil: tl.uraianHasil,
           tanggalSelesai: today.toISOString(),
         });
@@ -838,7 +924,8 @@ export function useBusinessLogic() {
   // 9. AJUKAN SURAT KELUAR (Tabel 14 & 29) — Petugas Surat / Staf
   // ─────────────────────────────────────────────────────────────
   const apiAjukanSuratKeluar = (data: Partial<SuratKeluar>, asDraft: boolean = false) => {
-    const user = validateRole(['petugas_surat', 'kepala_bidang']);
+    // Sesuai Proposal Bab 1 Poin 8b: Konsep naskah dinas keluar disusun oleh Bidang / Staf Pelaksana Bidang
+    const user = validateRole(['kepala_bidang', 'staf_pelaksana', 'admin']);
     
     if (asDraft) {
       if (!data.perihal || !data.perihal.trim()) {
@@ -865,6 +952,7 @@ export function useBusinessLogic() {
     let skId = data.id;
     let isBaru = false;
     const status = asDraft ? 'draf' : 'menunggu_paraf';
+    const smRefId = data.suratMasukAsalId || data.refSuratMasukId;
 
     if (!skId) {
       skId = generateId('sk');
@@ -875,10 +963,13 @@ export function useBusinessLogic() {
         tujuan: data.tujuan || '',
         klasifikasiId: data.klasifikasiId || '',
         jenisSuratId: data.jenisSuratId,
+        sifat: data.sifat || 'biasa',
         isiRingkas: data.isiRingkas || '',
         status,
         penyusunId: user.id,
         nomorSurat: null,
+        suratMasukAsalId: smRefId,
+        refSuratMasukId: smRefId,
         createdAt: today.toISOString(),
         updatedAt: today.toISOString()
       }});
@@ -889,8 +980,11 @@ export function useBusinessLogic() {
         tujuan: data.tujuan || '',
         klasifikasiId: data.klasifikasiId || '',
         jenisSuratId: data.jenisSuratId,
+        sifat: data.sifat || 'biasa',
         isiRingkas: data.isiRingkas || '',
         status,
+        suratMasukAsalId: smRefId,
+        refSuratMasukId: smRefId,
         updatedAt: today.toISOString()
       }});
     }
@@ -932,10 +1026,33 @@ export function useBusinessLogic() {
     const sk = state.suratKeluar.find(s => s.id === skId);
     if (!sk || sk.status !== 'menunggu_paraf') throw new Error("Status tidak valid untuk paraf.");
 
+    // Validasi tanda tangan/paraf (Tahap 3): Jika Sekretaris belum mengunggah paraf, tolak proses
+    if (setuju && !user.urlTandaTangan) {
+      throw new Error("Anda belum mengunggah tanda tangan. Silakan unggah melalui halaman Profil terlebih dahulu.");
+    }
+
     const today = new Date();
     if (setuju) {
-      dispatch({ type: 'ADD_PERSETUJUAN', payload: { id: generateId('p'), suratKeluarId: skId, jenis: 'paraf_koordinasi', pelakuId: user.id, waktu: today.toISOString() }});
-      dispatch({ type: 'UPDATE_SURAT_KELUAR', payload: { id: skId, status: 'menunggu_ttd', updatedAt: today.toISOString() }});
+      const parafSnapshot = user.urlTandaTangan;
+      dispatch({ type: 'ADD_PERSETUJUAN', payload: {
+        id: generateId('p'),
+        suratKeluarId: skId,
+        jenis: 'paraf_koordinasi',
+        pelakuId: user.id,
+        waktu: today.toISOString(),
+        urlTandaTanganSnapshot: parafSnapshot,
+        namaPelakuSnapshot: user.nama,
+        nipPelakuSnapshot: user.nip,
+        jabatanPelakuSnapshot: user.jabatan || 'Sekretaris Dinas',
+      }});
+      dispatch({ type: 'UPDATE_SURAT_KELUAR', payload: {
+        id: skId,
+        status: 'menunggu_ttd',
+        updatedAt: today.toISOString(),
+        parafImageUrl: parafSnapshot,
+        parafNamaSnapshot: user.nama,
+        parafWaktuSnapshot: today.toISOString(),
+      }});
 
       // Riwayat — Tabel 15 setuju (Bab 4)
       dispatch({ type: 'ADD_RIWAYAT', payload: {
@@ -979,27 +1096,68 @@ export function useBusinessLogic() {
     const user = validateRole(['kepala_dinas']);
     const sk = state.suratKeluar.find(s => s.id === skId);
     if (!sk || sk.status !== 'menunggu_ttd') throw new Error("Status tidak valid untuk tanda tangan.");
+
+    // Validasi tanda tangan digital (Tahap 3): Jika Kepala Dinas belum mengunggah tanda tangan, tolak
+    if (!user.urlTandaTangan) {
+      throw new Error("Anda belum mengunggah tanda tangan. Silakan unggah melalui halaman Profil terlebih dahulu.");
+    }
+
     // Verifikasi menggunakan fungsi verifyPassword yang membaca dummyPassword dari state.users
     if (!user.email || !verifyPassword(user.email, passwordConfirm)) {
       throw new Error("Autentikasi gagal. Password salah.");
     }
 
     const today = new Date();
-    dispatch({ type: 'ADD_PERSETUJUAN', payload: { id: generateId('p'), suratKeluarId: skId, jenis: 'tanda_tangan', pelakuId: user.id, waktu: today.toISOString() }});
-    dispatch({ type: 'UPDATE_SURAT_KELUAR', payload: { id: skId, status: 'ditandatangani', updatedAt: today.toISOString() }});
+    const ttdSnapshot = user.urlTandaTangan;
 
-    // Riwayat — Tabel 16 (Bab 4)
+    dispatch({ type: 'ADD_PERSETUJUAN', payload: {
+      id: generateId('p'),
+      suratKeluarId: skId,
+      jenis: 'tanda_tangan',
+      pelakuId: user.id,
+      waktu: today.toISOString(),
+      urlTandaTanganSnapshot: ttdSnapshot,
+      namaPelakuSnapshot: user.nama,
+      nipPelakuSnapshot: user.nip || '197402262000032002',
+      jabatanPelakuSnapshot: user.jabatan || 'Kepala Dinas Pertanian',
+    }});
+
+    // Sesuai Proposal Bab 1 Poin 8b(d) & Poin 11:
+    // Status berubah menjadi Ditandatangani, menunggu Pemberian Nomor Surat Keluar Otomatis oleh Petugas Surat
+    dispatch({ type: 'UPDATE_SURAT_KELUAR', payload: {
+      id: skId,
+      status: 'ditandatangani',
+      updatedAt: today.toISOString(),
+      ttdImageUrl: ttdSnapshot,
+      ttdNamaSnapshot: user.nama,
+      ttdNipSnapshot: user.nip || '197402262000032002',
+      ttdWaktuSnapshot: today.toISOString(),
+    }});
+
+    // Riwayat — Status Ditandatangani
     dispatch({ type: 'ADD_RIWAYAT', payload: {
       id: generateId('r'), suratKeluarId: skId, status: 'Ditandatangani',
       pelakuId: user.id, waktu: today.toISOString(),
-      catatan: `Kepala Dinas (${user.nama}) menandatangani surat. Menunggu penomoran oleh Petugas Surat.`
+      catatan: `Kepala Dinas (${user.nama}) menandatangani naskah dinas keluar secara digital. Berkas diserahkan ke Petugas Surat untuk penerbitan nomor surat keluar otomatis.`
     }});
 
-    dispatch({ type: 'ADD_NOTIFIKASI', payload: {
-      id: generateId('n'), userId: sk.penyusunId, judul: 'Surat Telah Ditandatangani',
-      pesan: `Surat "${sk.perihal}" telah ditandatangani Kepala Dinas. Silakan terbitkan nomor surat.`,
-      tautanUrl: `/surat-keluar/${skId}`, dibaca: false, createdAt: today.toISOString()
-    }});
+    // Notifikasi ke Petugas Surat untuk memberikan nomor surat keluar otomatis
+    state.users.filter(u => u.role === 'petugas_surat' && u.aktif).forEach(petugas => {
+      dispatch({ type: 'ADD_NOTIFIKASI', payload: {
+        id: generateId('n'), userId: petugas.id, judul: 'Surat Telah Ditandatangani Kadis — Siap Diberi Nomor',
+        pesan: `Surat "${sk.perihal}" telah disahkan Kepala Dinas. Silakan terbitkan nomor surat keluar resmi.`,
+        tautanUrl: `/surat-keluar/${skId}`, dibaca: false, createdAt: today.toISOString()
+      }});
+    });
+
+    // Notifikasi info ke pemrakarsa surat
+    if (sk.penyusunId !== user.id) {
+      dispatch({ type: 'ADD_NOTIFIKASI', payload: {
+        id: generateId('n'), userId: sk.penyusunId, judul: 'Konsep Surat Telah Ditandatangani Kadis',
+        pesan: `Konsep surat "${sk.perihal}" telah disetujui dan ditandatangani Kepala Dinas. Menunggu penomoran resmi oleh Petugas Surat.`,
+        tautanUrl: `/surat-keluar/${skId}`, dibaca: false, createdAt: today.toISOString()
+      }});
+    }
   };
 
   // ─────────────────────────────────────────────────────────────
@@ -1039,14 +1197,16 @@ export function useBusinessLogic() {
   };
 
   // ─────────────────────────────────────────────────────────────
-  // 12. TERBITKAN NOMOR SURAT (Tabel 17) — Petugas Surat
+  // 12. TERBITKAN NOMOR SURAT (Tabel 17) — Petugas Surat (Idempoten)
   // ─────────────────────────────────────────────────────────────
   const apiTerbitkanNomorSurat = (skId: string) => {
-    const user = validateRole(['petugas_surat']);
+    const user = validateRole(['petugas_surat', 'admin']);
     const sk = state.suratKeluar.find(s => s.id === skId);
     if (!sk) throw new Error("Surat keluar tidak ditemukan.");
-    if (sk.status !== 'ditandatangani') throw new Error("Surat belum ditandatangani oleh Kepala Dinas.");
-    if (sk.nomorSurat) throw new Error("Surat sudah memiliki nomor.");
+    if (sk.nomorSurat) return sk.nomorSurat; // Sudah memiliki nomor (terkunci/read-only)
+    if (sk.status !== 'ditandatangani' && sk.status !== 'nomor_diterbitkan') {
+      throw new Error("Nomor surat keluar hanya dapat diterbitkan setelah surat berstatus Ditandatangani oleh Kepala Dinas.");
+    }
 
     const klas = state.klasifikasi.find(k => k.id === sk.klasifikasiId);
     if (!klas) throw new Error("Klasifikasi tidak valid.");
@@ -1055,16 +1215,43 @@ export function useBusinessLogic() {
     const tahun = today.getFullYear();
     const bulanRomawi = toRomawi(today.getMonth() + 1);
 
-    let currentCounter = state.nomorSuratCounter?.find(c => c.tahun === tahun && c.klasifikasiKode === klas.kode);
-    let nextValue = currentCounter ? currentCounter.counter + 1 : 1;
-    
-    dispatch({ type: 'UPDATE_COUNTER' as any, payload: { tahun, klasifikasiKode: klas.kode, counter: nextValue }});
+    const skTahunIni = state.suratKeluar.filter((s) => {
+      const tgl = s.tanggalKirim || s.createdAt;
+      const thn = tgl ? new Date(tgl).getFullYear() : today.getFullYear();
+      return thn === tahun;
+    });
 
-    const nomorSurat = `${klas.kode}/${String(nextValue).padStart(3, '0')}/DISTAN-MS/${bulanRomawi}/${tahun}`;
+    let maxUrutKeluar = 0;
+    for (const s of skTahunIni) {
+      let num = s.nomorUrut;
+      if (!num || isNaN(num)) {
+        if (s.nomorSurat) {
+          const parts = s.nomorSurat.split('/');
+          if (parts.length >= 2) {
+            const parsed = parseInt(parts[1], 10);
+            if (!isNaN(parsed)) num = parsed;
+          }
+        }
+      }
+      if (num && num > maxUrutKeluar) maxUrutKeluar = num;
+    }
+
+    const counterItem = state.nomorSuratCounter?.find(
+      (c) => c.tahun === tahun && (c.klasifikasiKode === 'SURAT_KELUAR' || !c.klasifikasiKode)
+    );
+    if (counterItem && counterItem.counter > maxUrutKeluar) {
+      maxUrutKeluar = counterItem.counter;
+    }
+
+    const nextValue = maxUrutKeluar + 1;
+    const kodeInstansi = 'DISTAN-MS';
+    const nomorSurat = `${klas.kode}/${nextValue}/${kodeInstansi}/${bulanRomawi}/${tahun}`;
     
-    // Status menjadi 'nomor_diterbitkan' (bukan langsung terkirim & arsip, agar petugas dapat melengkapi tanggal & berkas final)
+    dispatch({ type: 'UPDATE_COUNTER', payload: { tahun, klasifikasiKode: 'SURAT_KELUAR', counter: nextValue }});
+
+    // Status menjadi 'nomor_diterbitkan'
     dispatch({ type: 'UPDATE_SURAT_KELUAR', payload: { 
-      id: skId, nomorSurat, status: 'nomor_diterbitkan', updatedAt: today.toISOString() 
+      id: skId, nomorSurat, nomorUrut: nextValue, status: 'nomor_diterbitkan', updatedAt: today.toISOString() 
     }});
     
     // Riwayat — Tabel 17 (Bab 4)
@@ -1079,7 +1266,11 @@ export function useBusinessLogic() {
   };
 
   // 12b. DOKUMENTASIKAN DAN KIRIM SURAT KELUAR (Bab 4 Poin 8) — Petugas Surat
-  const apiDokumentasikanDanKirimSuratKeluar = (skId: string, tanggalKirim: string, file: File | null) => {
+  const apiDokumentasikanDanKirimSuratKeluar = (
+    skId: string,
+    tanggalKirim: string,
+    file: File | null
+  ) => {
     const user = validateRole(['petugas_surat']);
     const sk = state.suratKeluar.find(s => s.id === skId);
     if (!sk) throw new Error("Surat tidak ditemukan.");
@@ -1103,10 +1294,37 @@ export function useBusinessLogic() {
     dispatch({ type: 'ADD_RIWAYAT', payload: {
       id: generateId('r'), suratKeluarId: skId, status: 'Terkirim',
       pelakuId: user.id, waktu: today.toISOString(),
-      catatan: `Surat resmi nomor ${sk.nomorSurat} dikirimkan kepada ${sk.tujuan} pada ${new Date(tanggalKirim).toLocaleDateString('id-ID')} dan diarsipkan oleh ${user.nama}.`
+      catatan: `Surat resmi nomor ${sk.nomorSurat} dikirimkan kepada ${sk.tujuan} pada ${new Date(tanggalKirim).toLocaleDateString('id-ID')} dan dibuat entri arsip digital oleh ${user.nama}.`
     }});
 
-    autoArchive('keluar', skId, `ARS-K-${tahun}/${skId}`, berkasUrl, sk.perihal, sk.nomorSurat || '-', sk.klasifikasiId, tahun, sk.jenisSuratId);
+    // Entri Arsip Digital dibuat untuk diverifikasi kode klasifikasinya oleh Petugas Surat
+    autoArchive('keluar', skId, sk.nomorUrut || 1, berkasUrl, sk.perihal, sk.nomorSurat || '-', sk.klasifikasiId, tahun, sk.jenisSuratId, {
+      statusArsip: 'menunggu_verifikasi',
+      tanggalSelesai: today.toISOString(),
+    });
+
+    // Jika surat keluar ini merupakan balasan atas surat masuk, periksa apakah surat masuk dapat ditutup
+    const smOriginId = sk.suratMasukAsalId || sk.refSuratMasukId;
+    if (smOriginId) {
+      const smOrigin = state.suratMasuk.find(s => s.id === smOriginId);
+      const dispOrigin = state.disposisi.find(d => d.suratMasukId === smOriginId);
+      if (smOrigin && dispOrigin) {
+        const allBidangDone = dispOrigin.bidangTujuan.length > 0 && dispOrigin.bidangTujuan.every(b =>
+          b.statusProses === 'selesai' || b.statusProses === 'ditindak_langsung'
+        );
+        if (allBidangDone) {
+          dispatch({ type: 'UPDATE_SURAT_MASUK', payload: { id: smOriginId, status: 'selesai', updatedAt: today.toISOString() }});
+          dispatch({ type: 'UPDATE_DISPOSISI', payload: { id: dispOrigin.id, status: 'selesai', updatedAt: today.toISOString() }});
+          autoArchive('masuk', smOrigin.id, smOrigin.nomorAgenda || '1', smOrigin.berkasUrl, smOrigin.perihal, smOrigin.nomorSuratAsal, smOrigin.klasifikasiId, today.getFullYear(), smOrigin.jenisSuratId, {
+            statusArsip: 'menunggu_verifikasi',
+            tanggalSelesai: today.toISOString(),
+            suratBalasanId: skId,
+            suratBalasanNomor: sk.nomorSurat || undefined,
+            suratBalasanPerihal: sk.perihal,
+          });
+        }
+      }
+    }
 
     if (sk.penyusunId !== user.id) {
       dispatch({ type: 'ADD_NOTIFIKASI', payload: {
@@ -1412,6 +1630,150 @@ export function useBusinessLogic() {
   };
 
   // ─────────────────────────────────────────────────────────────
+  // DATA MASTER GENERIK TERPADU (Tahap 6 & Tabel 12) — Admin
+  // ─────────────────────────────────────────────────────────────
+  const apiTambahDataMaster = (
+    kategori: KategoriDataMaster,
+    kode: string,
+    label: string,
+    keterangan?: string,
+    urutan?: number,
+    meta?: Record<string, any>
+  ) => {
+    const admin = validateRole(['admin']);
+    const cleanKode = kode.trim().toLowerCase();
+    const cleanLabel = label.trim();
+    if (!cleanKode || !cleanLabel) throw new Error('Kode dan label data master wajib diisi.');
+
+    // Validasi keunikan kode dan label dalam kategori yang sama
+    const duplicateKode = (state.dataMaster || []).find(
+      d => d.kategori === kategori && d.kode.toLowerCase() === cleanKode
+    );
+    if (duplicateKode) {
+      throw new Error(`Kode "${kode}" sudah terdaftar pada kategori ini. Gunakan kode yang unik.`);
+    }
+
+    const duplicateLabel = (state.dataMaster || []).find(
+      d => d.kategori === kategori && d.label.toLowerCase() === cleanLabel.toLowerCase()
+    );
+    if (duplicateLabel) {
+      throw new Error(`Label "${label}" sudah terdaftar pada kategori ini. Gunakan label yang unik.`);
+    }
+
+    const id = generateId('dm');
+    const today = new Date();
+    const currentCategoryCount = (state.dataMaster || []).filter(d => d.kategori === kategori).length;
+
+    dispatch({
+      type: 'ADD_DATA_MASTER',
+      payload: {
+        id,
+        kategori,
+        kode: cleanKode,
+        label: cleanLabel,
+        keterangan: keterangan?.trim() || '',
+        aktif: true,
+        urutan: urutan ?? currentCategoryCount + 1,
+        meta,
+        createdAt: today.toISOString(),
+      },
+    });
+
+    dispatch({
+      type: 'ADD_LOG',
+      payload: {
+        id: generateId('la'),
+        userId: admin.id,
+        aksi: 'Tambah Data Master',
+        detail: `Menambahkan master [${kategori}]: ${cleanLabel} (${cleanKode})`,
+        waktu: today.toISOString(),
+      },
+    });
+
+    return id;
+  };
+
+  const apiUbahDataMaster = (
+    id: string,
+    data: {
+      kode?: string;
+      label?: string;
+      keterangan?: string;
+      urutan?: number;
+      meta?: Record<string, any>;
+    }
+  ) => {
+    const admin = validateRole(['admin']);
+    const item = (state.dataMaster || []).find(d => d.id === id);
+    if (!item) throw new Error('Data master tidak ditemukan.');
+
+    const cleanKode = data.kode !== undefined ? data.kode.trim().toLowerCase() : item.kode;
+    const cleanLabel = data.label !== undefined ? data.label.trim() : item.label;
+
+    if (!cleanKode || !cleanLabel) throw new Error('Kode dan label data master tidak boleh kosong.');
+
+    // Validasi keunikan kode dan label selain item ini
+    if (cleanKode !== item.kode) {
+      const duplicateKode = (state.dataMaster || []).find(
+        d => d.id !== id && d.kategori === item.kategori && d.kode.toLowerCase() === cleanKode
+      );
+      if (duplicateKode) throw new Error(`Kode "${data.kode}" sudah terdaftar pada kategori ini.`);
+    }
+
+    if (cleanLabel.toLowerCase() !== item.label.toLowerCase()) {
+      const duplicateLabel = (state.dataMaster || []).find(
+        d => d.id !== id && d.kategori === item.kategori && d.label.toLowerCase() === cleanLabel.toLowerCase()
+      );
+      if (duplicateLabel) throw new Error(`Label "${data.label}" sudah terdaftar pada kategori ini.`);
+    }
+
+    const today = new Date();
+    dispatch({
+      type: 'UPDATE_DATA_MASTER',
+      payload: {
+        id,
+        kode: cleanKode,
+        label: cleanLabel,
+        keterangan: data.keterangan !== undefined ? data.keterangan.trim() : item.keterangan,
+        urutan: data.urutan !== undefined ? data.urutan : item.urutan,
+        meta: data.meta !== undefined ? data.meta : item.meta,
+      },
+    });
+
+    dispatch({
+      type: 'ADD_LOG',
+      payload: {
+        id: generateId('la'),
+        userId: admin.id,
+        aksi: 'Ubah Data Master',
+        detail: `Memperbarui master [${item.kategori}]: ${cleanLabel} (${cleanKode})`,
+        waktu: today.toISOString(),
+      },
+    });
+  };
+
+  const apiToggleDataMaster = (id: string) => {
+    const admin = validateRole(['admin']);
+    const item = (state.dataMaster || []).find(d => d.id === id);
+    if (!item) throw new Error('Data master tidak ditemukan.');
+
+    const newStatus = !item.aktif;
+    const today = new Date();
+    dispatch({ type: 'UPDATE_DATA_MASTER', payload: { id, aktif: newStatus } });
+
+    dispatch({
+      type: 'ADD_LOG',
+      payload: {
+        id: generateId('la'),
+        userId: admin.id,
+        aksi: newStatus ? 'Aktifkan Data Master' : 'Nonaktifkan Data Master',
+        detail: `${newStatus ? 'Mengaktifkan' : 'Menonaktifkan'} master [${item.kategori}]: ${item.label}`,
+        waktu: today.toISOString(),
+      },
+    });
+  };
+
+  // ─────────────────────────────────────────────────────────────
   // 15. CATATAN KOORDINASI SEKDIS (Tabel 22 & Bab 4 Poin 4)
   // ─────────────────────────────────────────────────────────────
   const apiBeriCatatanSekdis = (dispId: string, catatan: string) => {
@@ -1528,7 +1890,11 @@ export function useBusinessLogic() {
   // 20. BUKTI TERIMA TUJUAN (L26) — Petugas Surat
   // Satu-satunya isian yang boleh dilengkapi setelah arsip (AT-13)
   // ─────────────────────────────────────────────────────────────
-  const apiBuktiTerima = (skId: string, tanggalDiterima: string, namaPenerima: string) => {
+  const apiBuktiTerima = (
+    skId: string,
+    tanggalDiterima: string,
+    namaPenerima: string
+  ) => {
     const user = validateRole(['petugas_surat', 'admin']);
     const sk = state.suratKeluar.find(s => s.id === skId);
     if (!sk) throw new Error('Surat tidak ditemukan.');
@@ -1634,16 +2000,89 @@ export function useBusinessLogic() {
     });
   };
 
+  // ─────────────────────────────────────────────────────────────
+  // 31. KELOLA TANDA TANGAN PRIBADI & ADMIN (Tahap 3)
+  // ─────────────────────────────────────────────────────────────
+  const apiUploadTandaTangan = (userId: string, dataUrl: string) => {
+    const user = validateRole(['admin', 'sekretaris', 'kepala_dinas', 'kepala_bidang', 'staf_pelaksana', 'petugas_surat']);
+    if (user.role !== 'admin' && user.id !== userId) {
+      throw new Error("Anda hanya memiliki wewenang untuk mengubah tanda tangan akun Anda sendiri.");
+    }
+    if (!dataUrl) throw new Error("Berkas gambar tanda tangan tidak boleh kosong.");
+
+    dispatch({ type: 'UPDATE_USER', payload: { id: userId, urlTandaTangan: dataUrl } });
+
+    dispatch({ type: 'ADD_LOG', payload: {
+      id: generateId('la'), userId: user.id, aksi: 'Perbarui Tanda Tangan Digital',
+      detail: `${user.nama} memperbarui tanda tangan digital untuk pengguna ID ${userId}`,
+      waktu: new Date().toISOString(),
+    }});
+  };
+
+  const apiHapusTandaTangan = (userId: string) => {
+    const user = validateRole(['admin', 'sekretaris', 'kepala_dinas', 'kepala_bidang', 'staf_pelaksana', 'petugas_surat']);
+    if (user.role !== 'admin' && user.id !== userId) {
+      throw new Error("Anda hanya memiliki wewenang untuk menghapus tanda tangan akun Anda sendiri.");
+    }
+
+    dispatch({ type: 'UPDATE_USER', payload: { id: userId, urlTandaTangan: undefined } });
+
+    dispatch({ type: 'ADD_LOG', payload: {
+      id: generateId('la'), userId: user.id, aksi: 'Hapus Tanda Tangan Digital',
+      detail: `${user.nama} menghapus tanda tangan digital untuk pengguna ID ${userId}`,
+      waktu: new Date().toISOString(),
+    }});
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // 32. VERIFIKASI ARSIP DIGITAL OLEH PETUGAS SURAT (Proposal Bab 1 Poin 5f)
+  // ─────────────────────────────────────────────────────────────
+  const apiVerifikasiArsip = (arsipId: string) => {
+    const user = validateRole(['petugas_surat', 'admin']);
+    const arsip = state.arsip.find(a => a.id === arsipId);
+    if (!arsip) throw new Error("Arsip digital tidak ditemukan.");
+
+    const today = new Date();
+    dispatch({
+      type: 'UPDATE_ARSIP',
+      payload: {
+        id: arsipId,
+        statusArsip: 'diarsipkan',
+      }
+    });
+
+    dispatch({ type: 'ADD_LOG', payload: {
+      id: generateId('la'), userId: user.id, aksi: 'Verifikasi & Kunci Arsip Digital',
+      detail: `Petugas Surat (${user.nama}) memverifikasi kode klasifikasi arsip ${arsip.kodeArsip} dan mengesahkan status diarsipkan (terkunci/read-only).`,
+      waktu: today.toISOString()
+    }});
+  };
+
+  // ─────────────────────────────────────────────────────────────
+  // 33. RESET DATA SURAT (Hanya Data Surat, Data User Tetap Utuh)
+  // ─────────────────────────────────────────────────────────────
+  const apiResetDataSurat = () => {
+    dispatch({ type: 'RESET_DATA_SURAT' });
+  };
+
   return {
     apiCatatSuratMasuk, apiBuatDisposisi, apiBeriDisposisi, apiTerimaDisposisi,
+    apiParafPenerimaanDisposisi: apiTerimaDisposisi,
     apiTeruskanKeStaf, apiTindakLanjutLangsung, apiSimpanProgres, apiLaporkanHasil, apiPeriksaLaporan,
     apiAjukanSuratKeluar, apiParafKoordinasi, apiTandatanganSurat, apiTolakSuratKeluar, apiTerbitkanNomorSurat,
     apiDokumentasikanDanKirimSuratKeluar,
-    apiBuktiTerima, apiKoreksiMetadataArsip,
+    apiBuktiTerima, apiKoreksiMetadataArsip, apiVerifikasiArsip,
     apiTambahPengguna, apiUbahPengguna, apiTogglePengguna, apiResetPassword,
+    apiUploadTandaTangan, apiHapusTandaTangan,
     apiTambahUnitKerja, apiUbahUnitKerja, apiToggleUnitKerja, apiHapusUnitKerja,
     apiTambahKlasifikasi, apiUbahKlasifikasi, apiToggleKlasifikasi,
+    apiTambahDataMaster, apiUbahDataMaster, apiToggleDataMaster,
     apiBeriCatatanSekdis, apiBubuhkanParaf, apiTidakPerluDisposisi,
     apiTriggerPengingatBatasWaktu,
+    apiResetDataSurat,
   };
 }
+
+export const useApi = useBusinessLogic;
+
+

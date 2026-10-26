@@ -28,7 +28,7 @@ const ALL_SK: StatusSuratKeluar[] = [
 ];
 
 const ALL_SIFAT: SifatSurat[] = [
-  'biasa', 'umum', 'pemberitahuan', 'penting', 'segera', 'segera', 'rahasia',
+  'biasa', 'umum', 'penting', 'segera', 'rahasia',
 ];
 
 export default function KatalogPage() {

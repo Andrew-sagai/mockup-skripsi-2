@@ -71,7 +71,7 @@ export default function BuatDisposisiPage({ params }: { params: Promise<{ suratI
     if (key === 'segera')  return sm.sifat === 'segera';
     if (key === 'penting') return sm.sifat === 'penting';
     if (key === 'rahasia') return sm.sifat === 'rahasia';
-    if (key === 'biasa')   return sm.sifat === 'biasa' || sm.sifat === 'umum' || sm.sifat === 'pemberitahuan';
+    if (key === 'biasa')   return sm.sifat === 'biasa' || sm.sifat === 'umum';
     return false;
   };
 

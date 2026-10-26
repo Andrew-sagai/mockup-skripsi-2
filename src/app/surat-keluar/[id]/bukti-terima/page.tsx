@@ -13,10 +13,10 @@ export default function BuktiTerimaPage({ params }: { params: Promise<{ id: stri
 
   const surat = state.suratKeluar.find((s) => s.id === id);
 
-  const [tanggal, setTanggal]     = useState('');
-  const [nama, setNama]           = useState('');
-  const [errorMsg, setErrorMsg]   = useState('');
-  const [saved, setSaved]         = useState(false);
+  const [tanggal, setTanggal]   = useState('');
+  const [nama, setNama]         = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [saved, setSaved]       = useState(false);
 
   if (!surat) {
     return (
@@ -61,7 +61,11 @@ export default function BuktiTerimaPage({ params }: { params: Promise<{ id: stri
   const handleSimpan = () => {
     setErrorMsg('');
     try {
-      apiBuktiTerima(surat.id, tanggal, nama);
+      apiBuktiTerima(
+        surat.id,
+        tanggal,
+        nama
+      );
       setSaved(true);
     } catch (e: any) {
       setErrorMsg(e.message);
@@ -160,6 +164,7 @@ export default function BuktiTerimaPage({ params }: { params: Promise<{ id: stri
                   <AlertCircle size={15} aria-hidden="true" /> {errorMsg}
                 </div>
               )}
+
               <div className="form-row">
                 <div className="form-group">
                   <label className="form-label" htmlFor="tgl-diterima">
@@ -174,8 +179,14 @@ export default function BuktiTerimaPage({ params }: { params: Promise<{ id: stri
                   <input id="nama-penerima" className="form-input" value={nama} onChange={(e) => setNama(e.target.value)} placeholder="Nama lengkap penerima" />
                 </div>
               </div>
+
               <div className="form-actions">
-                <button id="btn-simpan-bukti" className="btn btn-primary" onClick={handleSimpan} disabled={!siapSimpan}>
+                <button
+                  id="btn-simpan-bukti"
+                  className="btn btn-primary"
+                  onClick={handleSimpan}
+                  disabled={!siapSimpan}
+                >
                   <CheckCircle2 size={15} aria-hidden="true" /> Simpan Bukti Terima
                 </button>
                 <Link href={`/surat-keluar/${surat.id}`} className="btn btn-ghost">Batal</Link>
