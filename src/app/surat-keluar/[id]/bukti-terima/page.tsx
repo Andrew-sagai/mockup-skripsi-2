@@ -58,10 +58,10 @@ export default function BuktiTerimaPage({ params }: { params: Promise<{ id: stri
     (r) => r.suratKeluarId === surat.id && r.status === 'Bukti Terima Dicatat'
   ).sort((a, b) => new Date(b.waktu).getTime() - new Date(a.waktu).getTime());
 
-  const handleSimpan = () => {
+  const handleSimpan = async () => {
     setErrorMsg('');
     try {
-      apiBuktiTerima(
+      await apiBuktiTerima(
         surat.id,
         tanggal,
         nama

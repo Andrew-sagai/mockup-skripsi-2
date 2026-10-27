@@ -8,6 +8,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { FileCheck, Shield, AlertCircle, FileText, Download } from 'lucide-react';
 import { BadgeSifat, ChipStatus, PenandaBatasWaktu, ModalStandar, PdfViewerEmbedded } from '@/components/ui';
 import { JENIS_INSTRUKSI_LABELS } from '@/lib/types';
+import { urutkanTerbaru } from '@/lib/utils';
 
 const STATUS_OPTIONS = [
   { value: 'semua', label: 'Semua' },
@@ -36,11 +37,6 @@ export default function TugasSayaPage() {
   const filteredData = useMemo(() => {
     if (!user || user.role !== 'staf_pelaksana') return [];
 
-    let result = myPenugasan.filter(p => 
-      ['diteruskan_staf', 'dikerjakan', 'dikembalikan', 'selesai'].includes(p.status) || 
-      p.status
-    );
-
     // Map internal status for filtering
     const mappedPenugasan = myPenugasan.map(p => {
       const d = state.disposisi.find(disp => disp.id === p.disposisiId);
@@ -58,9 +54,9 @@ export default function TugasSayaPage() {
     }).filter(p => p.d); // must have valid disposisi
 
     if (filterStatus !== 'semua') {
-      return mappedPenugasan.filter(p => p.derivedStatus === filterStatus);
+      return urutkanTerbaru(mappedPenugasan, (p) => p.d?.createdAt).filter(p => p.derivedStatus === filterStatus);
     }
-    return mappedPenugasan;
+    return urutkanTerbaru(mappedPenugasan, (p) => p.d?.createdAt);
   }, [myPenugasan, filterStatus, state.disposisi, state.tindakLanjut, user]);
 
   // Access Control
@@ -139,7 +135,7 @@ export default function TugasSayaPage() {
                     </td>
                     <td>
                       <div style={{ fontSize: 13 }}>{JENIS_INSTRUKSI_LABELS[p.d!.instruksi]}</div>
-                      {p.catatanPenugasan && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>"{p.catatanPenugasan}"</div>}
+                      {p.catatanPenugasan && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>&quot;{p.catatanPenugasan}&quot;</div>}
                     </td>
                     <td>
                       {sm?.batasWaktuSurat ? (

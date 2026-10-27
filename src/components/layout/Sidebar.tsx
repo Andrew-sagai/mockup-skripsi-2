@@ -65,10 +65,6 @@ export default function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const user = state.currentUser;
-  if (!user) return null;
-
-  const menuItems = getMenuItems(user.role);
-  const unreadCount = getUnreadCount();
 
   const pendingParafTtdCount = useMemo(() => {
     if (!user) return 0;
@@ -79,7 +75,12 @@ export default function Sidebar() {
       return state.suratKeluar.filter((s) => s.status === 'menunggu_ttd').length;
     }
     return 0;
-  }, [state.suratKeluar, user.role]);
+  }, [state.suratKeluar, user]);
+
+  if (!user) return null;
+
+  const menuItems = getMenuItems(user.role);
+  const unreadCount = getUnreadCount();
 
   const getInitials = (name: string) => {
     return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();

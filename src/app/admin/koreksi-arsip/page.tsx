@@ -43,10 +43,10 @@ export default function KoreksiArsipPage() {
 
   const siapKonfirmasi = arsipId !== '' && alasan.trim() !== '' && perubahan.length > 0;
 
-  const handleKonfirmasi = () => {
+  const handleKonfirmasi = async () => {
     setErrorMsg('');
     try {
-      apiKoreksiMetadataArsip(arsipId, perihalBaru.trim() || null, klasId || null, alasan.trim());
+      await apiKoreksiMetadataArsip(arsipId, perihalBaru.trim() || null, klasId || null, alasan.trim());
       setBerhasil(true);
       setKonfirmasi(false);
     } catch (e: any) {

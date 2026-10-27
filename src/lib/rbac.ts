@@ -1,7 +1,7 @@
 // ============================================================
 // RBAC — Role-Based Access Control
 // ============================================================
-import { UserRole } from './types';
+import type { UserRole } from './types';
 
 export const routePermissions: Record<string, UserRole[]> = {
   '/dashboard': ['admin', 'petugas_surat', 'sekretaris', 'kepala_dinas', 'kepala_bidang', 'staf_pelaksana'],

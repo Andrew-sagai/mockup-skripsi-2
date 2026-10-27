@@ -6,9 +6,9 @@ import { useStore } from '@/lib/store';
 import { Bell, Check, CheckCheck, AlertTriangle, AlertCircle, Info } from 'lucide-react';
 
 export default function NotifikasiPage() {
-  const { state, dispatch } = useStore();
+  const { state, markNotifikasiRead } = useStore();
   const user = state.currentUser;
-  
+
   const [filterBaca, setFilterBaca] = useState('semua');
   const [filterTingkat, setFilterTingkat] = useState('semua');
   const [error, setError] = useState('');
@@ -16,14 +16,20 @@ export default function NotifikasiPage() {
   const notifs = state.notifikasi.filter(n => n.userId === user?.id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   const unread = notifs.filter(n => !n.dibaca).length;
 
-  const handleMarkRead = (id: string) => {
-    dispatch({ type: 'MARK_NOTIFIKASI_READ', payload: id });
+  const handleMarkRead = async (id: string) => {
+    try {
+      await markNotifikasiRead(id);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Gagal menandai notifikasi.');
+    }
   };
 
-  const handleMarkAllRead = () => {
-    notifs.filter(n => !n.dibaca).forEach(n => {
-      dispatch({ type: 'MARK_NOTIFIKASI_READ', payload: n.id });
-    });
+  const handleMarkAllRead = async () => {
+    try {
+      await markNotifikasiRead();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Gagal menandai notifikasi.');
+    }
   };
 
   const formatTime = (d: string) => {

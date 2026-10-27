@@ -168,7 +168,7 @@ export default function SuratMasukBaruPage() {
     setErrorMsg('');
     await new Promise((r) => setTimeout(r, 500));
     try {
-      const result = apiCatatSuratMasuk(
+      const result = await apiCatatSuratMasuk(
         {
           nomorAgenda: nomorAgendaTampil,
           nomorUrut: parseInt(nomorAgendaTampil, 10),

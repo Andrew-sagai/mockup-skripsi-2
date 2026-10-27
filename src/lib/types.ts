@@ -194,6 +194,8 @@ export interface User {
   jabatan?: string;
   urlTandaTangan?: string; // Gambar tanda tangan digital tersimpan (PNG transparan / data URL)
   dummyPassword?: string; // HANYA prototipe; produksi memakai Supabase Auth
+  /** auth.users.id — hanya terisi pada mode Supabase */
+  authId?: string;
   createdAt: string;
 }
 
@@ -379,6 +381,33 @@ export interface SuratKeluar {
   updatedAt: string;
 }
 
+/** Satu baris tujuan pada buku ekspedisi (penerima + paraf). */
+export interface BukuEkspedisiTujuan {
+  id: string;
+  /** Id baris buku ekspedisi induknya. */
+  ekspedisiId: string;
+  urutan: number;
+  tujuan: string;
+  /** Paraf penerima, mis. "(Paraf: Jop)" atau "(TTD)". */
+  penerimaParaf: string;
+  /** Tanggal diterima — format buku dinas "12/1-26", atau teks asli dari catatan. */
+  tanggalTerima: string;
+  catatan: string;
+}
+
+/**
+ * Baris buku ekspedisi persuratan (Lampiran 1).
+ * Diisi dari tabel `buku_ekspedisi` + `buku_ekspedisi_tujuan`.
+ */
+export interface BukuEkspedisi {
+  id: string;
+  /** Hari dan tanggal pencatatan, mis. "Senin 12/01/26". */
+  hariTanggal: string;
+  tanggal: string;
+  dokumen: string;
+  tujuan: BukuEkspedisiTujuan[];
+}
+
 export interface PersetujuanSuratKeluar {
   id: string;
   suratKeluarId: string;
@@ -528,4 +557,6 @@ export interface AppState {
   nomorSuratCounter: NomorSuratCounter[];
   /** Pengaturan instansi (singleton) */
   pengaturanInstansi: PengaturanInstansi;
+  /** Buku ekspedisi persuratan (Lampiran 1) */
+  bukuEkspedisi: BukuEkspedisi[];
 }

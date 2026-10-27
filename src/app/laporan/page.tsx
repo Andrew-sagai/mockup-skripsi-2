@@ -70,8 +70,9 @@ export default function LaporanPage() {
   const [filterTahun, setFilterTahun] = useState<number>(new Date().getFullYear());
   const [search, setSearch] = useState<string>('');
 
-  if (!user) return null;
-  const role = user.role;
+  // Hook tidak boleh berada di balik kondisi, jadi `user` dijaga nullable di
+  // sini dan render kosong baru dihentikan setelah semua hook selesai.
+  const role = user?.role;
 
   // ─── Definisi Tab Berdasarkan RBAC ──────────────────────────────────────────
   const allowedTabs = useMemo(() => {
@@ -126,13 +127,13 @@ export default function LaporanPage() {
         state.disposisi.some(
           (d) =>
             d.suratMasukId === s.id &&
-            d.bidangTujuan?.some((b) => b.unitKerjaId === user.unitKerjaId)
+            d.bidangTujuan?.some((b) => b.unitKerjaId === user?.unitKerjaId)
         )
       );
     } else if (role === 'staf_pelaksana') {
       list = list.filter((s) =>
         state.penugasan.some((p) => {
-          if (p.stafId !== user.id) return false;
+          if (p.stafId !== user?.id) return false;
           const disp = state.disposisi.find((d) => d.id === p.disposisiId);
           return disp?.suratMasukId === s.id;
         })
@@ -272,6 +273,8 @@ export default function LaporanPage() {
         );
       });
   }, [scopedSM, state.disposisi, state.unitKerja, periode, filterBulan, filterTahun, search]);
+
+  if (!user) return null;
 
   // ─── Handler Cetak & Ekspor ─────────────────────────────────────────────────
   const handlePrint = () => {

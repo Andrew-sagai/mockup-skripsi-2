@@ -1,0 +1,139 @@
+[
+  {
+    "id": "u-1",
+    "nama": "Rina Margaretha",
+    "email": "admin@distan.go.id",
+    "password": "admin123",
+    "role": "admin",
+    "unitKerjaId": null
+  },
+  {
+    "id": "u-2",
+    "nama": "Johan Tumewu",
+    "email": "petugas1@distan.go.id",
+    "password": "petugas123",
+    "role": "petugas_surat",
+    "unitKerjaId": "uk-1",
+    "unitKerjaNama": "Sekretariat"
+  },
+  {
+    "id": "u-3",
+    "nama": "Sartika Polii",
+    "email": "petugas2@distan.go.id",
+    "password": "petugas123",
+    "role": "petugas_surat",
+    "unitKerjaId": "uk-1",
+    "unitKerjaNama": "Sekretariat"
+  },
+  {
+    "id": "u-4",
+    "nama": "Dr. Ir. Ventje Rantung, M.Si",
+    "email": "sekretaris@distan.go.id",
+    "password": "sekretaris123",
+    "role": "sekretaris",
+    "unitKerjaId": "uk-1",
+    "nip": "197005121995031001",
+    "jabatan": "Sekretaris Dinas Pertanian",
+    "unitKerjaNama": "Sekretariat"
+  },
+  {
+    "id": "u-5",
+    "nama": "Feybie F. Pusung, S.Pt, M.Si",
+    "email": "kadis@distan.go.id",
+    "password": "kadis123",
+    "role": "kepala_dinas",
+    "unitKerjaId": null,
+    "nip": "197402262000032002",
+    "jabatan": "Kepala Dinas Pertanian"
+  },
+  {
+    "id": "u-6",
+    "nama": "Ir. Henny Tamboto, M.Si",
+    "email": "kabid.peternakan@distan.go.id",
+    "password": "kabid123",
+    "role": "kepala_bidang",
+    "unitKerjaId": "uk-6",
+    "unitKerjaNama": "Bidang Peternakan dan Kesehatan Hewan"
+  },
+  {
+    "id": "u-7",
+    "nama": "Dr. Steven Lontoh",
+    "email": "kabid.tph@distan.go.id",
+    "password": "kabid123",
+    "role": "kepala_bidang",
+    "unitKerjaId": "uk-3",
+    "unitKerjaNama": "Bidang Tanaman Pangan dan Hortikultura"
+  },
+  {
+    "id": "u-8",
+    "nama": "Ir. Grace Wenas, M.P",
+    "email": "kabid.sarpras@distan.go.id",
+    "password": "kabid123",
+    "role": "kepala_bidang",
+    "unitKerjaId": "uk-4",
+    "unitKerjaNama": "Bidang Prasarana dan Sarana Pertanian"
+  },
+  {
+    "id": "u-9",
+    "nama": "Ir. Martha Liando, M.Si",
+    "email": "kabid.perkebunan@distan.go.id",
+    "password": "kabid123",
+    "role": "kepala_bidang",
+    "unitKerjaId": "uk-2",
+    "unitKerjaNama": "Bidang Perkebunan"
+  },
+  {
+    "id": "u-10",
+    "nama": "Drs. Ronny Pangkey",
+    "email": "kabid.penyuluhan@distan.go.id",
+    "password": "kabid123",
+    "role": "kepala_bidang",
+    "unitKerjaId": "uk-5",
+    "unitKerjaNama": "Bidang Penyuluhan Pertanian"
+  },
+  {
+    "id": "u-11",
+    "nama": "Santi Mamonto",
+    "email": "staf.peternakan@distan.go.id",
+    "password": "staf123",
+    "role": "staf_pelaksana",
+    "unitKerjaId": "uk-6",
+    "unitKerjaNama": "Bidang Peternakan dan Kesehatan Hewan"
+  },
+  {
+    "id": "u-12",
+    "nama": "Budi Sumolang",
+    "email": "staf.tph@distan.go.id",
+    "password": "staf123",
+    "role": "staf_pelaksana",
+    "unitKerjaId": "uk-3",
+    "unitKerjaNama": "Bidang Tanaman Pangan dan Hortikultura"
+  },
+  {
+    "id": "u-13",
+    "nama": "Dewi Kalalo",
+    "email": "staf.sarpras@distan.go.id",
+    "password": "staf123",
+    "role": "staf_pelaksana",
+    "unitKerjaId": "uk-4",
+    "unitKerjaNama": "Bidang Prasarana dan Sarana Pertanian"
+  },
+  {
+    "id": "u-14",
+    "nama": "Ferly Mamusung",
+    "email": "staf.perkebunan1@distan.go.id",
+    "password": "staf123",
+    "role": "staf_pelaksana",
+    "unitKerjaId": "uk-2",
+    "unitKerjaNama": "Bidang Perkebunan"
+  },
+  {
+    "id": "u-15",
+    "nama": "Eko Warouw",
+    "email": "staf.penyuluhan@distan.go.id",
+    "password": "staf123",
+    "role": "staf_pelaksana",
+    "unitKerjaId": "uk-5",
+    "unitKerjaNama": "Bidang Penyuluhan Pertanian"
+  }
+]

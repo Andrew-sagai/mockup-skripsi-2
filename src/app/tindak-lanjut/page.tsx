@@ -375,7 +375,7 @@ export default function TindakLanjutPage() {
                         </div>
                         {it.d.catatanKepala && (
                           <div style={{ fontSize: 12, color: 'var(--tinta-redup)', fontStyle: 'italic', marginTop: 3 }}>
-                            "{it.d.catatanKepala.slice(0, 55)}{it.d.catatanKepala.length > 55 ? '…' : ''}"
+                            &quot;{it.d.catatanKepala.slice(0, 55)}{it.d.catatanKepala.length > 55 ? '…' : ''}&quot;
                           </div>
                         )}
                       </td>

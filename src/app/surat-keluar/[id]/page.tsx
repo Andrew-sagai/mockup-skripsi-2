@@ -143,9 +143,9 @@ export default function SuratKeluarDetailPage({ params }: { params: Promise<{ id
   const hapusPdf = () => { setFileFinal(null); setPdfUrl(null); setPdfError(''); if (fileInputRef.current) fileInputRef.current.value = ''; };
 
   // ── Handler: Terbitkan Nomor ─────────────────────────────────
-  const handleTerbitkan = () => {
+  const handleTerbitkan = async () => {
     setErrorMsg('');
-    try { apiTerbitkanNomorSurat(surat.id); } catch (e: any) { setErrorMsg(e.message); }
+    try { await apiTerbitkanNomorSurat(surat.id); } catch (e: any) { setErrorMsg(e.message); }
   };
 
   // ── Handler: Tandai Terkirim ─────────────────────────────────
@@ -153,7 +153,7 @@ export default function SuratKeluarDetailPage({ params }: { params: Promise<{ id
     setErrorMsg('');
     setIsBusy(true);
     try {
-      apiDokumentasikanDanKirimSuratKeluar(
+      await apiDokumentasikanDanKirimSuratKeluar(
         surat.id,
         tanggalKirim,
         fileFinal
@@ -173,23 +173,23 @@ export default function SuratKeluarDetailPage({ params }: { params: Promise<{ id
   };
 
   // ── Handler: Paraf Sekretaris ────────────────────────────────
-  const handleParaf = () => {
+  const handleParaf = async () => {
     setErrorMsg('');
-    try { apiParafKoordinasi(surat.id, true, ''); } catch (e: any) { setErrorMsg(e.message); }
+    try { await apiParafKoordinasi(surat.id, true, ''); } catch (e: any) { setErrorMsg(e.message); }
   };
 
   // ── Handler: TTD Kepala Dinas ────────────────────────────────
-  const handleTtd = () => {
+  const handleTtd = async () => {
     setErrorMsg('');
-    try { apiTandatanganSurat(surat.id, passwordConfirm); setModalTtd(false); } catch (e: any) { setErrorMsg(e.message); }
+    try { await apiTandatanganSurat(surat.id, passwordConfirm); setModalTtd(false); } catch (e: any) { setErrorMsg(e.message); }
   };
 
   // ── Handler: Tolak / Kembalikan ─────────────────────────────
-  const handleTolak = () => {
+  const handleTolak = async () => {
     setErrorMsg('');
     try {
-      if (surat.status === 'menunggu_ttd') apiTolakSuratKeluar(surat.id, catatanRevisi);
-      else apiParafKoordinasi(surat.id, false, catatanRevisi);
+      if (surat.status === 'menunggu_ttd') await apiTolakSuratKeluar(surat.id, catatanRevisi);
+      else await apiParafKoordinasi(surat.id, false, catatanRevisi);
       setModalTolak(false);
     } catch (e: any) { setErrorMsg(e.message); }
   };
@@ -590,7 +590,7 @@ export default function SuratKeluarDetailPage({ params }: { params: Promise<{ id
                         )}
                       </div>
                       <p className="form-hint" style={{ marginTop: 6 }}>
-                        Status tetap "Ditandatangani" selama berkas atau tanggal belum lengkap (AT-08).
+                        Status tetap &quot;Ditandatangani&quot; selama berkas atau tanggal belum lengkap (AT-08).
                       </p>
                     </div>
                   </div>
@@ -717,7 +717,7 @@ export default function SuratKeluarDetailPage({ params }: { params: Promise<{ id
           }
         >
           <p style={{ fontSize: 13, lineHeight: 1.6, margin: 0 }}>
-            Surat keluar "{surat.perihal}" akan ditandai terkirim dan arsip digital dibuat otomatis. Tindakan ini tidak dapat dibatalkan.
+            Surat keluar &quot;{surat.perihal}&quot; akan ditandai terkirim dan arsip digital dibuat otomatis. Tindakan ini tidak dapat dibatalkan.
           </p>
         </ModalStandar>
 

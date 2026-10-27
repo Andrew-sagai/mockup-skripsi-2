@@ -6,6 +6,7 @@ import {
   ExternalLink, Printer, Shield, Clock, FileCheck, Info
 } from 'lucide-react';
 import { getPdfFromCandidates } from '@/lib/pdf-storage';
+import { supabaseAktif } from '@/lib/data/supabase';
 
 export interface SuratMetadataPreview {
   nomor?: string;
@@ -62,12 +63,21 @@ export function PdfViewerEmbedded({
     return isKeluar ? '/docs/sample-surat-keluar.pdf' : '/docs/sample-surat-masuk.pdf';
   }, [fileUrl, judul, metadata?.jenisSurat]);
 
-  // Resolusi berkas PDF: IndexedDB -> Server/Static -> Sample Acuan Resmi
-  useEffect(() => {
-    let isCancelled = false;
+  // Kunci resolução berkas. Saat kunci berubah, state pemuatan disetel ulang
+  // pada tahap render — bukan di dalam efek — supaya tidak memicu render
+  // berantai.
+  const resolveKey = `${fileUrl ?? ''}|${metadata?.nomor ?? ''}|${defaultFallbackUrl}`;
+  const [prevResolveKey, setPrevResolveKey] = useState(resolveKey);
+  if (prevResolveKey !== resolveKey) {
+    setPrevResolveKey(resolveKey);
     setLoading(true);
     setError(false);
     setLoadProgress(30);
+  }
+
+  // Resolusi berkas PDF: IndexedDB -> Server/Static -> Sample Acuan Resmi
+  useEffect(() => {
+    let isCancelled = false;
 
     async function resolvePdf() {
       // 1. Jika URL sudah berupa blob URL atau data URL yang masih aktif
@@ -81,31 +91,34 @@ export function PdfViewerEmbedded({
         return;
       }
 
-      // 2. Cek apakah ada berkas fisik nyata yang tersimpan di IndexedDB browser lokal
-      try {
-        const candidates = [
-          fileUrl,
-          fileUrl?.replace(/^\/docs\//, ''),
-          metadata?.nomor ? `sm_${metadata.nomor}` : null,
-          metadata?.nomor ? `sm_agenda_${metadata.nomor}` : null,
-          metadata?.nomor ? `sk_${metadata.nomor}` : null,
-        ];
-        const storedBlob = await getPdfFromCandidates(candidates);
-        if (storedBlob && !isCancelled) {
-          // Bersihkan object URL sebelumnya
-          if (createdObjectUrlRef.current) {
-            URL.revokeObjectURL(createdObjectUrlRef.current);
+      // 2. Cek apakah ada berkas fisik nyata yang tersimpan di IndexedDB browser lokal.
+      //    Pada Mode Supabase berkas berada di Storage, bukan IndexedDB.
+      if (!supabaseAktif()) {
+        try {
+          const candidates = [
+            fileUrl,
+            fileUrl?.replace(/^\/docs\//, ''),
+            metadata?.nomor ? `sm_${metadata.nomor}` : null,
+            metadata?.nomor ? `sm_agenda_${metadata.nomor}` : null,
+            metadata?.nomor ? `sk_${metadata.nomor}` : null,
+          ];
+          const storedBlob = await getPdfFromCandidates(candidates);
+          if (storedBlob && !isCancelled) {
+            // Bersihkan object URL sebelumnya
+            if (createdObjectUrlRef.current) {
+              URL.revokeObjectURL(createdObjectUrlRef.current);
+            }
+            const blobUrl = URL.createObjectURL(storedBlob);
+            createdObjectUrlRef.current = blobUrl;
+            setResolvedUrl(blobUrl);
+            setSourceType('local');
+            setIsFallback(false);
+            setLoading(false);
+            return;
           }
-          const blobUrl = URL.createObjectURL(storedBlob);
-          createdObjectUrlRef.current = blobUrl;
-          setResolvedUrl(blobUrl);
-          setSourceType('local');
-          setIsFallback(false);
-          setLoading(false);
-          return;
+        } catch (err) {
+          console.warn('Gagal membaca IndexedDB:', err);
         }
-      } catch (err) {
-        console.warn('Gagal membaca IndexedDB:', err);
       }
 
       // 3. Jika URL mengarah ke placeholder dummy lama
@@ -122,14 +135,23 @@ export function PdfViewerEmbedded({
 
       // 4. Periksa ketersediaan berkas di server secara pre-flight (mencegah iframe memuat halaman 404)
       try {
-        const checkRes = await fetch(cleanUrl, { method: 'GET' });
+        // Berkas privat dari Storage dicek dengan HEAD agar isinya tidak
+        // diunduh dua kali (pre-flight + pemuatan iframe).
+        const cekPrivat = cleanUrl.startsWith('/api/files/');
+        const checkRes = await fetch(cleanUrl, { method: cekPrivat ? 'HEAD' : 'GET' });
         if (isCancelled) return;
 
         const contentType = checkRes.headers.get('content-type') || '';
         const isFallbackHeader = checkRes.headers.get('x-fallback-pdf') === 'true';
 
+        // Untuk berkas privat, HEAD hanya memberi tahu keberadaan berkas;
+        // tipe konten diperiksa saat iframe memuatnya.
+        const tipeDiterima = cekPrivat
+          ? checkRes.ok
+          : contentType.includes('application/pdf') || contentType.includes('binary');
+
         // Jika berhasil dan tipe konten adalah PDF
-        if (checkRes.ok && (contentType.includes('application/pdf') || contentType.includes('binary'))) {
+        if (checkRes.ok && tipeDiterima) {
           setResolvedUrl(cleanUrl);
           setIsFallback(isFallbackHeader);
           setSourceType(isFallbackHeader ? 'sample' : 'remote');

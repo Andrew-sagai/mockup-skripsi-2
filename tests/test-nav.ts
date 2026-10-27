@@ -1,6 +1,7 @@
 import { getBatasWaktuState } from '../src/lib/batas-waktu.ts';
 import { getMenuItems } from '../src/lib/rbac.ts';
-import { USER_ROLE_LABELS, UserRole } from '../src/lib/types.ts';
+import { USER_ROLE_LABELS } from '../src/lib/types.ts';
+import type { UserRole } from '../src/lib/types.ts';
 
 function resolveActiveHref(pathname: string, items: { href: string }[]): string | null {
   const matches = items.filter(

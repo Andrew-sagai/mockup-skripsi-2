@@ -121,7 +121,7 @@ function SuratKeluarBaruContent() {
     setSaving(true);
     try {
       const linkedSmId = smAsal?.id || selectedSmId || undefined;
-      apiAjukanSuratKeluar({ ...form, suratMasukAsalId: linkedSmId, refSuratMasukId: linkedSmId } as any, asDraft);
+      await apiAjukanSuratKeluar({ ...form, suratMasukAsalId: linkedSmId, refSuratMasukId: linkedSmId } as any, asDraft);
       router.push('/surat-keluar');
     } catch (err: any) {
       setErrorMsg(err.message);

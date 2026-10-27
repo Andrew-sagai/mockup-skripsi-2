@@ -7,9 +7,20 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:matriks": "node --experimental-strip-types tests/test-matriks-izin.ts"
+    "test:matriks": "node --experimental-strip-types tests/test-matriks-izin.ts",
+    "test:nav": "node --experimental-strip-types tests/test-nav.ts",
+    "test:skenario": "node --experimental-strip-types tests/test-skenario-bab4.ts",
+    "test:rls": "node scripts/uji-rls.mjs",
+    "test:storage": "node scripts/uji-storage.mjs",
+    "check:sql": "python scripts/check-sql.py && python scripts/check-sql-semantics.py",
+    "check:migrasi": "node scripts/cek-migrasi-pglite.mjs",
+    "supabase:migrate": "node scripts/migrate.mjs",
+    "seed:supabase": "node scripts/seed-supabase.mjs",
+    "import:mock": "node scripts/import-mock-state.mjs"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.118.0",
     "lucide-react": "^1.47.0",
     "next": "16.3.5",
     "react": "19.2.8",
@@ -17,11 +28,13 @@
     "recharts": "^3.10.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.12",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
+    "pg": "^8.23.1",
     "typescript": "^5"
   }
 }

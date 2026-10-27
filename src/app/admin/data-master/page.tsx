@@ -51,10 +51,15 @@ const TAB_METADATA: Record<string, { label: string; singular: string; placeholde
 };
 
 export default function DataMasterPage() {
-  const { state, dispatch, generateId, addLog } = useStore();
+  const { state } = useStore();
   const {
+    apiTambahUnitKerja,
+    apiUbahUnitKerja,
     apiHapusUnitKerja,
     apiToggleUnitKerja,
+    apiTambahKlasifikasi,
+    apiUbahKlasifikasi,
+    apiToggleKlasifikasi,
     apiTambahDataMaster,
     apiUbahDataMaster,
     apiToggleDataMaster
@@ -102,7 +107,7 @@ export default function DataMasterPage() {
     setShowUnitModal(true);
   };
 
-  const handleSaveUnit = () => {
+  const handleSaveUnit = async () => {
     const cleanKode = formUnit.kode.trim().toUpperCase();
     const cleanNama = formUnit.nama.trim();
     if (!cleanKode || !cleanNama) { setUnitError('Kode dan nama unit kerja wajib diisi.'); return; }
@@ -112,27 +117,30 @@ export default function DataMasterPage() {
     if (state.unitKerja.some((u) => u.id !== editUnitId && u.nama.toLowerCase() === cleanNama.toLowerCase())) {
       setUnitError(`Nama "${cleanNama}" sudah terdaftar. Gunakan nama yang unik.`); return;
     }
-    if (editUnitId) {
-      dispatch({ type: 'UPDATE_UNIT_KERJA', payload: { id: editUnitId, kode: cleanKode, nama: cleanNama, labelLembar: cleanNama } });
-      addLog('Ubah Unit Kerja', `Memperbarui unit kerja: ${cleanNama} (${cleanKode})`);
-    } else {
-      const id = generateId('uk');
-      dispatch({ type: 'ADD_UNIT_KERJA', payload: { id, kode: cleanKode, nama: cleanNama, jenis: formUnit.jenis, labelLembar: cleanNama, urutanLembar: state.unitKerja.length + 1, aktif: true } });
-      addLog('Tambah Unit Kerja', `Menambahkan unit kerja baru: ${cleanNama} (${cleanKode})`);
+    try {
+      if (editUnitId) {
+        await apiUbahUnitKerja(editUnitId, { kode: cleanKode, nama: cleanNama, labelLembar: cleanNama });
+      } else {
+        await apiTambahUnitKerja(cleanKode, cleanNama, cleanNama, state.unitKerja.length + 1, formUnit.jenis);
+      }
+    } catch (e: any) {
+      setUnitError(e.message || 'Gagal menyimpan unit kerja.');
+      return;
     }
+    setUnitError('');
     setShowUnitModal(false);
     setEditUnitId(null);
   };
 
-  const handleToggleUnit = (id: string) => {
+  const handleToggleUnit = async (id: string) => {
     setToggleError('');
-    try { apiToggleUnitKerja(id); } catch (e: any) { setToggleError(e.message); }
+    try { await apiToggleUnitKerja(id); } catch (e: any) { setToggleError(e.message); }
   };
 
-  const handleDeleteUnit = () => {
+  const handleDeleteUnit = async () => {
     if (!deleteUnitId) return;
     setDeleteError('');
-    try { apiHapusUnitKerja(deleteUnitId); setDeleteUnitId(null); } catch (e: any) { setDeleteError(e.message); }
+    try { await apiHapusUnitKerja(deleteUnitId); setDeleteUnitId(null); } catch (e: any) { setDeleteError(e.message); }
   };
 
   // ──────────────────────────────────────────────────────────────
@@ -152,29 +160,39 @@ export default function DataMasterPage() {
     setShowKlasModal(true);
   };
 
-  const handleSaveKlas = () => {
+  const handleSaveKlas = async () => {
     const cleanKode = formKlas.kode.trim();
     const cleanNama = formKlas.nama.trim();
     if (!cleanKode || !cleanNama) { setKlasError('Kode dan nama klasifikasi wajib diisi.'); return; }
     if (state.klasifikasi.some((k) => k.id !== editKlasId && k.kode.toLowerCase() === cleanKode.toLowerCase())) {
       setKlasError(`Kode klasifikasi "${cleanKode}" sudah terdaftar. Gunakan kode yang unik.`); return;
     }
-    if (editKlasId) {
-      dispatch({ type: 'UPDATE_KLASIFIKASI', payload: { id: editKlasId, kode: cleanKode, nama: cleanNama, unitKerjaId: formKlas.unitKerjaId || undefined } });
-      addLog('Ubah Klasifikasi Arsip', `Memperbarui kode klasifikasi: ${cleanKode} — ${cleanNama}`);
-    } else {
-      const id = generateId('kl');
-      dispatch({ type: 'ADD_KLASIFIKASI', payload: { id, kode: cleanKode, nama: cleanNama, unitKerjaId: formKlas.unitKerjaId || undefined, aktif: true } });
-      addLog('Tambah Klasifikasi Arsip', `Menambahkan kode klasifikasi baru: ${cleanKode} — ${cleanNama}`);
+    try {
+      if (editKlasId) {
+        await apiUbahKlasifikasi(editKlasId, {
+          kode: cleanKode,
+          nama: cleanNama,
+          unitKerjaId: formKlas.unitKerjaId || null,
+        });
+      } else {
+        await apiTambahKlasifikasi(cleanKode, cleanNama, undefined, formKlas.unitKerjaId || null);
+      }
+    } catch (e: any) {
+      setKlasError(e.message || 'Gagal menyimpan klasifikasi.');
+      return;
     }
+    setKlasError('');
     setShowKlasModal(false);
     setEditKlasId(null);
   };
 
-  const toggleKlas = (id: string, aktif: boolean) => {
-    const k = state.klasifikasi.find((x) => x.id === id);
-    dispatch({ type: 'UPDATE_KLASIFIKASI', payload: { id, aktif: !aktif } });
-    addLog(aktif ? 'Nonaktifkan Klasifikasi' : 'Aktifkan Klasifikasi', `${aktif ? 'Menonaktifkan' : 'Mengaktifkan'} kode klasifikasi ${k?.kode || id}`);
+  const toggleKlas = async (id: string, aktif: boolean) => {
+    setKlasError('');
+    try {
+      await apiToggleKlasifikasi(id);
+    } catch (e: any) {
+      setKlasError(e.message || 'Gagal mengubah status klasifikasi.');
+    }
   };
 
   // ──────────────────────────────────────────────────────────────
@@ -206,20 +224,20 @@ export default function DataMasterPage() {
     setShowDmModal(true);
   };
 
-  const handleSaveDm = () => {
+  const handleSaveDm = async () => {
     const currentCategory = TAB_KATEGORI_MAP[tab];
     if (!currentCategory) return;
     setDmError('');
     try {
       if (editDmId) {
-        apiUbahDataMaster(editDmId, {
+        await apiUbahDataMaster(editDmId, {
           kode: formDm.kode.trim(),
           label: formDm.label.trim(),
           keterangan: formDm.keterangan.trim(),
           urutan: Number(formDm.urutan) || 1,
         });
       } else {
-        apiTambahDataMaster(
+        await apiTambahDataMaster(
           currentCategory,
           formDm.kode.trim(),
           formDm.label.trim(),
@@ -234,9 +252,9 @@ export default function DataMasterPage() {
     }
   };
 
-  const handleToggleDm = (id: string) => {
+  const handleToggleDm = async (id: string) => {
     try {
-      apiToggleDataMaster(id);
+      await apiToggleDataMaster(id);
     } catch (err: any) {
       alert(err.message || 'Gagal mengubah status data master.');
     }

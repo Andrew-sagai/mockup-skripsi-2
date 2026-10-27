@@ -258,13 +258,6 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
         .sort((a, b) => new Date(b.waktu).getTime() - new Date(a.waktu).getTime())
     : [];
 
-  // ─── Efek: inisialisasi sifat ───
-  useEffect(() => {
-    if (dataSurat.sifat && !selectedSifat) {
-      setSelectedSifat(dataSurat.sifat);
-    }
-  }, [dataSurat.sifat, selectedSifat]);
-
   // ─── Akses ───────────────────────────────────────────────────────────────
   // Admin tidak boleh lihat kartu
   if (user?.role === 'admin') {
@@ -390,10 +383,10 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
   const instruksiChecked = (jenis: JenisInstruksi) => instruksiList.some(i => i.jenis === jenis);
 
   // ─── Handlers ────────────────────────────────────────────────────────────
-  const handleBubuhkanParaf = () => {
+  const handleBubuhkanParaf = async () => {
     try {
       setErrorMsg('');
-      apiBubuhkanParaf(id);
+      await apiBubuhkanParaf(id);
       setSuccessMsg('Paraf elektronik berhasil dibubuhkan.');
     } catch (e: any) { setErrorMsg(e.message); }
   };
@@ -412,7 +405,7 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
     setModal('kirim-disposisi');
   };
 
-  const doKirimDisposisi = () => {
+  const doKirimDisposisi = async () => {
     setLoading(true);
     try {
       const instruksiUtama: JenisInstruksi = instruksiList.length > 0
@@ -421,8 +414,8 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
       const updatedList = instruksiList.map(i =>
         i.jenis === 'lainnya' ? { ...i, teks: instruksiLainnyaTeks } : i
       );
-      apiBeriDisposisi(id, instruksiUtama, selectedTujuan, catatan, tenggat,
-        instruksiLainnyaTeks, updatedList, selectedSifat as any);
+      await apiBeriDisposisi(id, instruksiUtama, selectedTujuan, catatan, tenggat,
+        instruksiLainnyaTeks, updatedList, (selectedSifat || dataSurat.sifat) as any);
       setSuccessMsg('Disposisi berhasil dikirim.');
       setModal(null);
     } catch (e: any) { setErrorMsg(e.message); }
@@ -437,20 +430,20 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
     setModal('tidak-perlu');
   };
 
-  const doTidakPerluDisposisi = () => {
+  const doTidakPerluDisposisi = async () => {
     setLoading(true);
     try {
-      apiTidakPerluDisposisi(id, catatanTidakPerlu);
+      await apiTidakPerluDisposisi(id, catatanTidakPerlu);
       setSuccessMsg('Keputusan disimpan. Petugas Surat telah diberitahu.');
       setModal(null);
     } catch (e: any) { setErrorMsg(e.message); }
     setLoading(false);
   };
 
-  const handleTerimaDisposisi = () => {
+  const handleTerimaDisposisi = async () => {
     try {
       setErrorMsg('');
-      apiTerimaDisposisi(id);
+      await apiTerimaDisposisi(id);
       setSuccessMsg('Paraf penerimaan berhasil dibubuhkan oleh bidang Anda.');
     } catch (e: any) { setErrorMsg(e.message); }
   };
@@ -460,10 +453,10 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
     if (!selectedStaf) { setErrorMsg('Staf pelaksana wajib dipilih.'); return; }
     setModal('teruskan-staf');
   };
-  const doTeruskanStaf = () => {
+  const doTeruskanStaf = async () => {
     setLoading(true);
     try {
-      apiTeruskanKeStaf(id, selectedStaf, catatanPenugasan);
+      await apiTeruskanKeStaf(id, selectedStaf, catatanPenugasan);
       setSuccessMsg('Penugasan diteruskan ke staf pelaksana.');
       setModal(null);
     } catch (e: any) { setErrorMsg(e.message); }
@@ -478,7 +471,7 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
   const doTindakLangsung = async () => {
     setLoading(true);
     try {
-      apiTindakLanjutLangsung(id, uraianHasil, fileBerkas, perluSuratJawaban === true);
+      await apiTindakLanjutLangsung(id, uraianHasil, fileBerkas, perluSuratJawaban === true);
       if (fileBerkas) {
         try {
           await savePdfToStorage(`tl_${id}`, fileBerkas);
@@ -502,7 +495,7 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
   const doKirimLaporan = async () => {
     setLoading(true);
     try {
-      apiLaporkanHasil(id, uraianHasil, fileBerkas);
+      await apiLaporkanHasil(id, uraianHasil, fileBerkas);
       if (fileBerkas) {
         try {
           await savePdfToStorage(`tl_${id}`, fileBerkas);
@@ -518,22 +511,22 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
     setLoading(false);
   };
 
-  const handleSimpanProgres = () => {
+  const handleSimpanProgres = async () => {
     setErrorMsg('');
     try {
-      apiSimpanProgres(id, catatanProgres);
+      await apiSimpanProgres(id, catatanProgres);
       setSuccessMsg('Progres berhasil disimpan. Status menjadi Sedang Dikerjakan.');
     } catch (e: any) { setErrorMsg(e.message); }
   };
 
-  const handleSetujuiLaporan = (tlId: string) => {
+  const handleSetujuiLaporan = async (tlId: string) => {
     if (perluSuratJawaban === null) {
       setErrorMsg('Pilih apakah perlu surat jawaban terlebih dahulu.');
       return;
     }
     try {
       setErrorMsg('');
-      apiPeriksaLaporan(tlId, true, '', perluSuratJawaban);
+      await apiPeriksaLaporan(tlId, true, '', perluSuratJawaban);
       setSuccessMsg('Laporan disetujui. Disposisi selesai.');
     } catch (e: any) { setErrorMsg(e.message); }
   };
@@ -542,20 +535,20 @@ export default function KartuDisposisiPage({ params }: { params: Promise<{ id: s
     if (!catatanKembali.trim()) { setErrorMsg('Catatan perbaikan wajib diisi.'); return; }
     setModal(`kembalikan-${tlId}`);
   };
-  const doKembalikanLaporan = (tlId: string) => {
+  const doKembalikanLaporan = async (tlId: string) => {
     setLoading(true);
     try {
-      apiPeriksaLaporan(tlId, false, catatanKembali);
+      await apiPeriksaLaporan(tlId, false, catatanKembali);
       setSuccessMsg('Laporan dikembalikan untuk perbaikan.');
       setModal(null);
     } catch (e: any) { setErrorMsg(e.message); }
     setLoading(false);
   };
 
-  const handleSimpanKoordinasi = () => {
+  const handleSimpanKoordinasi = async () => {
     try {
       setErrorMsg('');
-      apiBeriCatatanSekdis(id, catatanKoordinasi);
+      await apiBeriCatatanSekdis(id, catatanKoordinasi);
       setSuccessMsg('Catatan koordinasi berhasil disimpan.');
     } catch (e: any) { setErrorMsg(e.message); }
   };

@@ -5,6 +5,7 @@ import { useStore } from '@/lib/store';
 import { useApi } from '@/lib/api';
 import { Search, Archive, Download, FileText, Eye, CheckCircle2 } from 'lucide-react';
 import { ModalStandar, PdfViewerEmbedded } from '@/components/ui';
+import { urutkanTerbaru } from '@/lib/utils';
 
 export default function ArsipPage() {
   const { state, getKlasifikasi, getJenisSurat, getScopedArsip } = useStore();
@@ -31,11 +32,11 @@ export default function ArsipPage() {
   const user = state.currentUser;
   const isPetugas = user?.role === 'petugas_surat';
 
-  const arsipList = getScopedArsip();
+  const arsipList = urutkanTerbaru(getScopedArsip(), (a) => a.createdAt);
 
-  const handleVerifikasi = (arsipId: string) => {
+  const handleVerifikasi = async (arsipId: string) => {
     try {
-      api.apiVerifikasiArsip(arsipId);
+      await api.apiVerifikasiArsip(arsipId);
       setPesanSukses('Kode klasifikasi berhasil diverifikasi dan status dokumen resmi menjadi Diarsipkan (terkunci/read-only).');
       setTimeout(() => setPesanSukses(null), 4000);
       if (selectedArsip && selectedArsip.id === arsipId) {

@@ -3,16 +3,29 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { USER_ROLE_LABELS, UserRole } from '@/lib/types';
-import { Mail, Lock, AlertCircle, RotateCcw, Users, WifiOff } from 'lucide-react';
+import DEMO_AKUN from '@/lib/demo-akun.json';
+import { Mail, Lock, AlertCircle, RotateCcw, Users, WifiOff, Database } from 'lucide-react';
 
 // Hanya untuk prototipe — produksi memakai Supabase Auth
 const SHOW_DEMO = true;
-const STORAGE_KEY = 'surat-dinas-state';
+const STORAGE_KEY = 'surat-dinas-state-v6';
+
+type DemoAkun = {
+  id: string;
+  nama: string;
+  email: string;
+  password: string;
+  role: UserRole;
+  unitKerjaId: string | null;
+  unitKerjaNama?: string;
+};
+
+const AKUN_DEMO = DEMO_AKUN as DemoAkun[];
 
 type ErrorKind = 'kredensial' | 'nonaktif' | 'koneksi' | null;
 
 export default function LoginPage() {
-  const { login, state } = useStore();
+  const { login, state, isSupabase } = useStore();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,29 +38,37 @@ export default function LoginPage() {
     setErrorKind(null);
     setLoading(true);
 
-    // Simulasi latensi jaringan
-    await new Promise((r) => setTimeout(r, 600));
+    // Simulasi latensi jaringan (hanya Mode Demo)
+    if (!isSupabase) {
+      await new Promise((r) => setTimeout(r, 600));
 
-    // Cek akun nonaktif lebih dulu agar pesan galat lebih spesifik
-    const matchUser = state.users.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase()
-    );
-
-    if (matchUser && !matchUser.aktif) {
-      setErrorKind('nonaktif');
-      setLoading(false);
-      return;
+      // Cek akun nonaktif lebih dulu agar pesan galat lebih spesifik
+      const matchUser = state.users.find(
+        (u) => u.email.toLowerCase() === email.toLowerCase()
+      );
+      if (matchUser && !matchUser.aktif) {
+        setErrorKind('nonaktif');
+        setLoading(false);
+        return;
+      }
     }
 
     try {
-      const user = login(email, password);
+      const user = await login(email, password);
       if (user) {
         router.push('/dashboard');
       } else {
         setErrorKind('kredensial');
       }
-    } catch {
-      setErrorKind('koneksi');
+    } catch (galat: any) {
+      const pesan = String(galat?.message || '');
+      if (/dinonaktifkan/i.test(pesan)) {
+        setErrorKind('nonaktif');
+      } else if (/belum terdaftar/i.test(pesan)) {
+        setErrorKind('kredensial');
+      } else {
+        setErrorKind('koneksi');
+      }
     }
 
     setLoading(false);
@@ -70,18 +91,16 @@ export default function LoginPage() {
     }
   };
 
-  // Kelompokkan akun aktif per peran untuk panel demo
-  const activeUsers = state.users.filter((u) => u.aktif);
-  const groupedUsers = activeUsers.reduce((acc, u) => {
+  // Kelompokkan akun demo per peran untuk panel demo
+  const groupedUsers = AKUN_DEMO.reduce((acc, u) => {
     let group = USER_ROLE_LABELS[u.role];
-    if ((u.role === 'kepala_bidang' || u.role === 'staf_pelaksana') && u.unitKerjaId) {
-      const uk = state.unitKerja.find((x) => x.id === u.unitKerjaId);
-      if (uk) group = `${USER_ROLE_LABELS[u.role]} — ${uk.nama.replace('Bidang ', '')}`;
+    if ((u.role === 'kepala_bidang' || u.role === 'staf_pelaksana') && u.unitKerjaNama) {
+      group = `${USER_ROLE_LABELS[u.role]} — ${u.unitKerjaNama.replace('Bidang ', '')}`;
     }
     if (!acc[group]) acc[group] = [];
     acc[group].push(u);
     return acc;
-  }, {} as Record<string, typeof state.users>);
+  }, {} as Record<string, DemoAkun[]>);
 
   return (
     <div className="login-page">
@@ -242,7 +261,7 @@ export default function LoginPage() {
                               cursor: 'pointer', textAlign: 'left', width: '100%',
                               transition: 'background var(--transition-fast)',
                             }}
-                            onClick={() => handleDemoLogin(u.email, u.dummyPassword || '')}
+                            onClick={() => handleDemoLogin(u.email, u.password)}
                             onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--pinus-tint)')}
                             onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--latar)')}
                           >
@@ -258,22 +277,37 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Reset data demo */}
-          <div style={{ marginTop: 14, textAlign: 'center' }}>
-            <button
-              id="btn-reset-demo"
-              type="button"
-              onClick={handleResetDemo}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-                padding: '6px 14px', background: 'transparent',
-                border: '1px solid var(--garis)', borderRadius: 4,
-                fontSize: 12, color: 'var(--tinta-redup)', cursor: 'pointer'
-              }}
-            >
-              <RotateCcw size={13} aria-hidden="true" />
-              Reset Data Demo
-            </button>
+          {/* Reset data demo — hanya bermakna pada Mode Demo */}
+          {!isSupabase && (
+            <div style={{ marginTop: 14, textAlign: 'center' }}>
+              <button
+                id="btn-reset-demo"
+                type="button"
+                onClick={handleResetDemo}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  padding: '6px 14px', background: 'transparent',
+                  border: '1px solid var(--garis)', borderRadius: 4,
+                  fontSize: 12, color: 'var(--tinta-redup)', cursor: 'pointer'
+                }}
+              >
+                <RotateCcw size={13} aria-hidden="true" />
+                Reset Data Demo
+              </button>
+            </div>
+          )}
+
+          {/* Penanda mode data yang sedang dipakai */}
+          <div
+            style={{
+              marginTop: 14, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              gap: 6, fontSize: 11, color: 'var(--tinta-redup)'
+            }}
+          >
+            <Database size={12} aria-hidden="true" />
+            {isSupabase
+              ? 'Mode Supabase — data tersimpan di server PostgreSQL.'
+              : 'Mode Demo — data tersimpan di peramban (localStorage).'}
           </div>
         </div>
       </div>

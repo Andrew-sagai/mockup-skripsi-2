@@ -73,14 +73,14 @@ export default function ProfilPage() {
   };
 
   // Simpan berkas yang diunggah
-  const handleSaveUploadedSignature = () => {
+  const handleSaveUploadedSignature = async () => {
     if (!previewDataUrl) {
       setFeedback({ tipe: 'error', pesan: 'Silakan pilih berkas tanda tangan terlebih dahulu.' });
       return;
     }
 
     try {
-      apiUploadTandaTangan(user.id, previewDataUrl);
+      await apiUploadTandaTangan(user.id, previewDataUrl);
       setSelectedFile(null);
       setPreviewDataUrl(null);
       setFeedback({
@@ -138,7 +138,7 @@ export default function ProfilPage() {
   };
 
   // Simpan coretan canvas
-  const handleSaveCanvasSignature = () => {
+  const handleSaveCanvasSignature = async () => {
     const canvas = canvasRef.current;
     if (!canvas || !hasDrawn) {
       setFeedback({ tipe: 'error', pesan: 'Silakan goreskan tanda tangan pada area canvas terlebih dahulu.' });
@@ -147,7 +147,7 @@ export default function ProfilPage() {
 
     try {
       const dataUrl = canvas.toDataURL('image/png');
-      apiUploadTandaTangan(user.id, dataUrl);
+      await apiUploadTandaTangan(user.id, dataUrl);
       clearCanvas();
       setFeedback({
         tipe: 'sukses',
@@ -159,9 +159,9 @@ export default function ProfilPage() {
   };
 
   // Hapus tanda tangan
-  const handleHapusTandaTangan = () => {
+  const handleHapusTandaTangan = async () => {
     try {
-      apiHapusTandaTangan(user.id);
+      await apiHapusTandaTangan(user.id);
       setShowConfirmHapus(false);
       setFeedback({
         tipe: 'sukses',

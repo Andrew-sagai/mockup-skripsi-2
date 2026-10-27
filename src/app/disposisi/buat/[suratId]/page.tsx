@@ -50,7 +50,7 @@ export default function BuatDisposisiPage({ params }: { params: Promise<{ suratI
     setErrorMsg('');
     setSending(true);
     try {
-      apiBuatDisposisi(sm.id);
+      await apiBuatDisposisi(sm.id);
       // State otomatis berubah — komponen akan re-render ke keadaan sudahDiajukan
     } catch (e: any) {
       setErrorMsg(e.message);
@@ -99,7 +99,7 @@ export default function BuatDisposisiPage({ params }: { params: Promise<{ suratI
             <div>
               <strong>Kartu Disposisi Berhasil Diajukan</strong>
               <p style={{ margin: '4px 0 0', fontSize: 13 }}>
-                Status surat berubah menjadi <strong>"Menunggu Disposisi"</strong>. Notifikasi diteruskan ke Kepala Dinas.
+                Status surat berubah menjadi <strong>&quot;Menunggu Disposisi&quot;</strong>. Notifikasi diteruskan ke Kepala Dinas.
               </p>
             </div>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexShrink: 0 }}>

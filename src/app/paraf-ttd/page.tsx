@@ -105,13 +105,13 @@ export default function ParafTtdPage() {
   };
 
   // Eksekusi aksi
-  const handleEksekusiAksi = () => {
+  const handleEksekusiAksi = async () => {
     if (!suratAksi) return;
     setFeedback(null);
 
     try {
       if (jenisAksi === 'paraf') {
-        apiParafKoordinasi(suratAksi.id, true, catatanAksi);
+        await apiParafKoordinasi(suratAksi.id, true, catatanAksi);
         setFeedback({
           tipe: 'sukses',
           pesan: `Paraf koordinasi untuk surat "${suratAksi.perihal}" berhasil dibubuhkan. Surat diteruskan ke Kepala Dinas.`,
@@ -123,7 +123,7 @@ export default function ParafTtdPage() {
           setFeedback({ tipe: 'error', pesan: 'Catatan revisi wajib diisi agar pemrakarsa memahami perbaikan.' });
           return;
         }
-        apiParafKoordinasi(suratAksi.id, false, catatanAksi);
+        await apiParafKoordinasi(suratAksi.id, false, catatanAksi);
         setFeedback({
           tipe: 'sukses',
           pesan: `Konsep surat "${suratAksi.perihal}" dikembalikan ke pemrakarsa dengan catatan revisi.`,
@@ -135,7 +135,7 @@ export default function ParafTtdPage() {
           setFeedback({ tipe: 'error', pesan: 'Kata sandi konfirmasi wajib diisi.' });
           return;
         }
-        apiTandatanganSurat(suratAksi.id, passwordKadis);
+        await apiTandatanganSurat(suratAksi.id, passwordKadis);
         setFeedback({
           tipe: 'sukses',
           pesan: `Surat keluar "${suratAksi.perihal}" berhasil ditandatangani secara digital. Menunggu penomoran oleh Petugas Surat.`,
@@ -147,7 +147,7 @@ export default function ParafTtdPage() {
           setFeedback({ tipe: 'error', pesan: 'Catatan penolakan wajib diisi.' });
           return;
         }
-        apiTolakSuratKeluar(suratAksi.id, catatanAksi);
+        await apiTolakSuratKeluar(suratAksi.id, catatanAksi);
         setFeedback({
           tipe: 'sukses',
           pesan: `Pengesahan surat "${suratAksi.perihal}" ditolak dan dikembalikan ke pemrakarsa.`,

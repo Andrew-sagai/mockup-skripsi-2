@@ -5,6 +5,7 @@ import { useStore } from '@/lib/store';
 import { STATUS_SURAT_KELUAR_LABELS } from '@/lib/types';
 import { ChipStatus, PenandaBatasWaktu } from '@/components/ui';
 import { MailOpen, Send, Clock, FileCheck, Book, AlertTriangle, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { urutkanTerbaru } from '@/lib/utils';
 
 export default function PetugasDashboard() {
   const { state } = useStore();
@@ -31,14 +32,14 @@ export default function PetugasDashboard() {
   const terkirim          = state.suratKeluar.filter((s) => s.status === 'terkirim').length;
 
   // Surat masuk diagenda (belum diajukan disposisi) — perlu tindakan Petugas
-  const perluDisposisi = state.suratMasuk
-    .filter((s) => s.status === 'diagenda')
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  // P5: terbaru di atas agar entri baru langsung tampil pertama
+  const perluDisposisi = urutkanTerbaru(
+    state.suratMasuk.filter((s) => s.status === 'diagenda'),
+    (s) => s.createdAt,
+  );
 
   // Surat masuk terbaru
-  const suratMasukTerbaru = [...state.suratMasuk]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 5);
+  const suratMasukTerbaru = urutkanTerbaru(state.suratMasuk, (s) => s.createdAt).slice(0, 5);
 
   // Peringatan batas waktu: surat masuk batas waktu ≤ 2 hari ke depan, belum selesai
   const peringatanBatasWaktu = state.suratMasuk.filter((s) => {

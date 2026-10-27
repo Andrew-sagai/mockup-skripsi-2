@@ -6,6 +6,7 @@ import { useBusinessLogic } from '@/lib/api';
 import { USER_ROLE_LABELS, UserRole, User } from '@/lib/types';
 import { KonfirmasiDialog, ModalStandar } from '@/components/ui';
 import { Plus, UserX, UserCheck, Search, Key, Edit3, AlertCircle, CheckCircle2, Mail, FilePen, Eye, Trash2, Upload } from 'lucide-react';
+import { urutkanTerbaru } from '@/lib/utils';
 
 export default function PenggunaPage() {
   const { state } = useStore();
@@ -48,13 +49,16 @@ export default function PenggunaPage() {
   const sekretariatUnit = state.unitKerja.find((u) => u.jenis === 'sekretariat');
   const bidangAktif     = state.unitKerja.filter((u) => u.jenis === 'bidang' && u.aktif);
 
-  const filtered = state.users.filter((u) => {
-    const q = search.toLowerCase();
-    const matchSearch = !q || u.nama.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
-    const matchRole   = filterRole === 'all' || u.role === filterRole;
-    const matchStatus = filterStatus === 'all' || (filterStatus === 'aktif' ? u.aktif : !u.aktif);
-    return matchSearch && matchRole && matchStatus;
-  });
+  const filtered = urutkanTerbaru(
+    state.users.filter((u) => {
+      const q = search.toLowerCase();
+      const matchSearch = !q || u.nama.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+      const matchRole   = filterRole === 'all' || u.role === filterRole;
+      const matchStatus = filterStatus === 'all' || (filterStatus === 'aktif' ? u.aktif : !u.aktif);
+      return matchSearch && matchRole && matchStatus;
+    }),
+    (u) => u.createdAt,
+  );
 
   // ── Tambah ──────────────────────────────────────────────────
   const handleRoleChange = (newRole: UserRole) => {
@@ -66,7 +70,7 @@ export default function PenggunaPage() {
     setForm((prev) => ({ ...prev, role: newRole, unitKerjaId: newUnitId, dummyPassword: passMap[newRole] || 'staf123' }));
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     setFormError('');
     const emailDup = state.users.some((u) => u.email.toLowerCase() === form.email.toLowerCase());
     if (emailDup) { setFormError('Email sudah terdaftar dalam sistem. Gunakan email yang berbeda.'); return; }
@@ -75,7 +79,7 @@ export default function PenggunaPage() {
       const unitId = isNoUnit(form.role) ? null
         : isSekretariat(form.role) ? (sekretariatUnit?.id || null)
         : (form.unitKerjaId || null);
-      apiTambahPengguna(form.nama, form.email, form.role, unitId, form.dummyPassword);
+      await apiTambahPengguna(form.nama, form.email, form.role, unitId, form.dummyPassword);
       setShowModal(false);
       setForm({ nama: '', email: '', role: 'staf_pelaksana', unitKerjaId: '', dummyPassword: 'staf123' });
     } catch (e: any) { setFormError(e.message); }
@@ -88,7 +92,7 @@ export default function PenggunaPage() {
     setEditModal((prev) => prev ? { ...prev, role: newRole, unitKerjaId: newUnitId } : null);
   };
 
-  const handleEdit = () => {
+  const handleEdit = async () => {
     if (!editModal) return;
     setEditError('');
     const emailDup = state.users.some((u) => u.email.toLowerCase() === editModal.email.toLowerCase() && u.id !== editModal.id);
@@ -97,15 +101,15 @@ export default function PenggunaPage() {
       const unitId = isNoUnit(editModal.role) ? null
         : isSekretariat(editModal.role) ? (sekretariatUnit?.id || null)
         : (editModal.unitKerjaId || null);
-      apiUbahPengguna(editModal.id, { nama: editModal.nama, email: editModal.email, role: editModal.role, unitKerjaId: unitId });
+      await apiUbahPengguna(editModal.id, { nama: editModal.nama, email: editModal.email, role: editModal.role, unitKerjaId: unitId });
       setEditModal(null);
     } catch (e: any) { setEditError(e.message); }
   };
 
   // ── Toggle aktif/nonaktif ──────────────────────────────────
-  const handleToggleConfirm = () => {
+  const handleToggleConfirm = async () => {
     if (!toggleTarget) return;
-    try { apiTogglePengguna(toggleTarget.id); } catch (e: any) { alert(e.message); }
+    try { await apiTogglePengguna(toggleTarget.id); } catch (e: any) { alert(e.message); }
     setToggleTarget(null);
   };
 
@@ -528,9 +532,9 @@ export default function PenggunaPage() {
                     <button
                       type="button"
                       className="btn btn-danger btn-sm"
-                      onClick={() => {
+                      onClick={async () => {
                         if (confirm(`Hapus tanda tangan digital untuk ${signatureModalUser.nama}?`)) {
-                          apiHapusTandaTangan(signatureModalUser.id);
+                          await apiHapusTandaTangan(signatureModalUser.id);
                           setSignatureModalUser(null);
                         }
                       }}
@@ -575,8 +579,8 @@ export default function PenggunaPage() {
                     <button
                       type="button"
                       className="btn btn-primary btn-sm"
-                      onClick={() => {
-                        apiUploadTandaTangan(signatureModalUser.id, signatureUploadDataUrl);
+                      onClick={async () => {
+                        await apiUploadTandaTangan(signatureModalUser.id, signatureUploadDataUrl);
                         setSignatureModalUser(null);
                         setSignatureUploadDataUrl(null);
                       }}

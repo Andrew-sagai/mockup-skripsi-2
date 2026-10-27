@@ -11,7 +11,7 @@ import type { LucideIcon } from 'lucide-react';
 import type { Tone, StatusDef, SifatDef, HasilTenggat, JenisStatus } from '@/lib/status';
 import { resolveStatus, SIFAT_DEFS, hitungTenggat } from '@/lib/status';
 import type { SifatSurat } from '@/lib/types';
-import { useState, useRef, useCallback, type ReactNode } from 'react';
+import { useState, useRef, useCallback, useEffect, createElement, type ReactNode } from 'react';
 
 // --- Peta ikon berdasar nama string ---
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -24,6 +24,15 @@ const ICON_MAP: Record<string, LucideIcon> = {
 
 function resolveIcon(name: string): LucideIcon {
   return ICON_MAP[name] ?? Circle;
+}
+
+/**
+ * Ikon dinamis dirender lewat `createElement`, bukan `<Icon />`.
+ * JSX dengan komponen yang ditentukan saat render dianggap komponen baru
+ * oleh React Compiler sehingga state-nya ter-reset tiap render.
+ */
+function IkonDinamis({ nama, size = 14 }: { nama: string; size?: number }) {
+  return createElement(resolveIcon(nama), { size, 'aria-hidden': true });
 }
 
 // ============================================================
@@ -45,12 +54,11 @@ const TONE_CLASSES: Record<Tone, string> = {
 
 export function ChipStatus({ jenis, status, compact }: ChipStatusProps) {
   const def = resolveStatus(jenis, status);
-  const Icon = resolveIcon(def.icon);
   const cls = `chip ${TONE_CLASSES[def.tone]}${compact ? ' chip-compact' : ''}`;
 
   return (
     <span className={cls}>
-      <Icon size={14} aria-hidden="true" />
+      <IkonDinamis nama={def.icon} />
       {!compact && <span>{def.label}</span>}
     </span>
   );
@@ -66,11 +74,10 @@ interface BadgeSifatProps {
 export function BadgeSifat({ sifat }: BadgeSifatProps) {
   const def: SifatDef = SIFAT_DEFS[sifat] ?? { label: sifat, tone: 'netral', icon: null };
   const cls = `chip ${TONE_CLASSES[def.tone]}`;
-  const Icon = def.icon ? resolveIcon(def.icon) : null;
 
   return (
     <span className={cls}>
-      {Icon && <Icon size={14} aria-hidden="true" />}
+      {def.icon && <IkonDinamis nama={def.icon} />}
       <span>{def.label}</span>
     </span>
   );
@@ -135,14 +142,17 @@ export function KonfirmasiDialog({
 }: KonfirmasiDialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
-  // sync open state with <dialog>
-  if (typeof window !== 'undefined' && dialogRef.current) {
-    if (open && !dialogRef.current.open) {
-      dialogRef.current.showModal();
-    } else if (!open && dialogRef.current.open) {
-      dialogRef.current.close();
+  // Sinkronkan `open` dengan elemen <dialog>. Harus di dalam efek: membaca
+  // `ref.current` saat render tidak dijamin berisi elemen yang terpasang.
+  useEffect(() => {
+    const el = dialogRef.current;
+    if (!el) return;
+    if (open && !el.open) {
+      el.showModal();
+    } else if (!open && el.open) {
+      el.close();
     }
-  }
+  }, [open]);
 
   return (
     <dialog
@@ -287,7 +297,6 @@ export function UnggahPdf({
 // ============================================================
 // ModalStandar — Tahap 7: Komponen modal standar reusable
 // ============================================================
-import { useEffect } from 'react';
 import { AlertTriangle as ModalAlertIcon, CheckCircle2 as ModalCheckIcon } from 'lucide-react';
 
 type ModalVariant = 'konfirmasi' | 'error' | 'sukses' | 'form';
@@ -376,6 +385,81 @@ export function ModalStandar({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Toast — notifikasi ringkas di tengah atas
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type ToastTingkat = 'sukses' | 'info' | 'peringatan' | 'galat';
+
+export interface ToastProps {
+  /** Teks pesan yang ditampilkan. Kosong / null = tersembunyi. */
+  pesan: string | null;
+  tingkat?: ToastTingkat;
+  /** Dipanggil saat toast ditutup otomatis atau lewat tombol tutup. */
+  onTutup: () => void;
+}
+
+const TOAST_COLORS: Record<ToastTingkat, { bg: string; border: string; text: string }> = {
+  sukses:     { bg: '#ecfdf5', border: '#10b981', text: '#047857' },
+  info:       { bg: '#eff6ff', border: '#3b82f6', text: '#1d4ed8' },
+  peringatan: { bg: '#fffbeb', border: '#f59e0b', text: '#92400e' },
+  galat:      { bg: '#fef2f2', border: '#f87171', text: '#b91c1c' },
+};
+
+/** Durasi auto-tutup (ms). Galat dan peringatan menunggu ditutup manual. */
+const AUTO_TUTUP_MS: Partial<Record<ToastTingkat, number>> = {
+  sukses: 5000,
+  info:   5000,
+};
+
+export function Toast({ pesan, tingkat = 'info', onTutup }: ToastProps) {
+  useEffect(() => {
+    if (!pesan) return;
+    const ms = AUTO_TUTUP_MS[tingkat];
+    if (!ms) return;
+    const t = setTimeout(onTutup, ms);
+    return () => clearTimeout(t);
+  }, [pesan, tingkat, onTutup]);
+
+  if (!pesan) return null;
+
+  const c = TOAST_COLORS[tingkat];
+  return (
+    <div
+      role="alert"
+      aria-live="polite"
+      style={{
+        position: 'fixed', top: 24, left: '50%', transform: 'translateX(-50%)',
+        zIndex: 2000,
+        padding: '12px 20px',
+        background: c.bg,
+        border: `1px solid ${c.border}`,
+        borderRadius: 8,
+        color: c.text,
+        maxWidth: 480, minWidth: 280,
+        display: 'flex', alignItems: 'center', gap: 8,
+        boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+        animation: 'fadeIn 0.25s ease-out',
+        fontWeight: 500,
+        fontSize: 14,
+      }}
+    >
+      <span style={{ flex: 1 }}>{pesan}</span>
+      <button
+        onClick={onTutup}
+        aria-label="Tutup notifikasi"
+        style={{
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: c.text, fontSize: 16, lineHeight: 1, padding: '0 2px',
+          flexShrink: 0,
+        }}
+      >
+        ✕
+      </button>
     </div>
   );
 }

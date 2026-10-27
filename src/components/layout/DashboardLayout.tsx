@@ -8,7 +8,7 @@ import Sidebar from './Sidebar';
 import Navbar from './Navbar';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { state, isHydrated, dispatch, generateId } = useStore();
+  const { state, isHydrated, dispatch, generateId, isSupabase } = useStore();
   const router = useRouter();
   const pathname = usePathname();
   // Ref untuk mencegah reminder check berjalan lebih dari sekali per mount
@@ -34,9 +34,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [state.currentUser, isHydrated, router, pathname]);
 
   // ── Trigger reminder & overdue check saat user login (sekali per mount) ──
-  // Simulasi client-side untuk pilot — di produksi ganti dengan cron/scheduler backend.
+  // Hanya pada Mode Demo. Pada Mode Supabase, pengingat digenerate pg_cron di
+  // server sehingga pemeriksaan client-side akan menghasilkan notifikasi ganda.
   // Referensi: Proposal poin 13(d)(e), Bab 4 subbab Notifikasi Otomatis.
   useEffect(() => {
+    if (isSupabase) return;
     if (!isHydrated || !state.currentUser) return;
     if (reminderChecked.current) return;
     reminderChecked.current = true;
@@ -52,7 +54,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     updatedDisposisi.forEach(u => {
       dispatch({ type: 'UPDATE_DISPOSISI', payload: u } as any);
     });
-  }, [isHydrated, state.currentUser]);
+  }, [isHydrated, state.currentUser, isSupabase]);
 
   // Tampilkan null selama hydration berlangsung atau currentUser belum ada.
   // Ini mencegah flash redirect dan rendering layout tanpa user.

@@ -6,7 +6,7 @@
 // ============================================================
 import React, {
   createContext, useContext, useReducer, useCallback,
-  useEffect, useState, ReactNode,
+  useEffect, useState, useRef, useSyncExternalStore, ReactNode,
 } from 'react';
 import {
   AppState, StoreAction, User, SuratMasuk, Disposisi,
@@ -22,6 +22,8 @@ import {
   ARSIP, NOTIFIKASI, RIWAYAT, LOG_AKTIVITAS, NOMOR_SURAT_COUNTER,
   PENGATURAN_INSTANSI, DATA_MASTER
 } from './mock-data';
+import { supabaseAktif, sb, rpc, GalatData } from './data/supabase';
+import { muatSemuaData, type DataTermuat } from './data/loader';
 
 // ─── Konstanta localStorage ────────────────────────────────
 const STORAGE_KEY = 'surat-dinas-state-v6';
@@ -47,12 +49,40 @@ const initialState: AppState = {
   nomorSuratCounter: NOMOR_SURAT_COUNTER,
   pengaturanInstansi: PENGATURAN_INSTANSI,
   dataMaster: DATA_MASTER,
+  bukuEkspedisi: [],
 };
+
+// ─── kosongkan — state tanpa data (dipakai mode Supabase sebelum data dimuat) ─
+function kosongkan(state: AppState): AppState {
+  return {
+    ...state,
+    currentUser: null,
+    users: [],
+    unitKerja: [],
+    jenisSurat: [],
+    klasifikasi: [],
+    dataMaster: [],
+    suratMasuk: [],
+    disposisi: [],
+    penugasan: [],
+    tindakLanjut: [],
+    suratKeluar: [],
+    persetujuan: [],
+    arsip: [],
+    notifikasi: [],
+    riwayat: [],
+    log: [],
+    nomorSuratCounter: [],
+    bukuEkspedisi: [],
+  };
+}
 
 // ─── loadState — baca dari localStorage, fallback ke initialState ─
 function loadState(): AppState {
   // Guard: jangan jalankan di server (Next.js SSR)
   if (typeof window === 'undefined') return initialState;
+  // Mode Supabase: jangan pakai data mock — data asli dimuat dari Postgres.
+  if (supabaseAktif()) return kosongkan(initialState);
   try {
     // Bersihkan cache persuratan versi lama agar reset data surat tuntas
     const oldKeys = ['surat-dinas-state', 'surat-dinas-state-v1', 'surat-dinas-state-v2', 'surat-dinas-state-v3', 'surat-dinas-state-v4', 'surat-dinas-state-v5'];
@@ -250,7 +280,21 @@ function loadState(): AppState {
 }
 
 // ─── Reducer ──────────────────────────────────────────────
-function appReducer(state: AppState, action: StoreAction | { type: 'HYDRATE_FROM_STORAGE'; payload: AppState }): AppState {
+export type StoreActionInternal =
+  | StoreAction
+  | { type: 'HYDRATE_FROM_STORAGE'; payload: AppState }
+  | { type: 'HYDRATE_FROM_SUPABASE'; payload: DataTermuat }
+  | { type: 'SET_CURRENT_USER'; payload: User | null };
+
+function appReducer(state: AppState, action: StoreActionInternal): AppState {
+  // Muat ulang seluruh data dari Postgres (mode Supabase).
+  if (action.type === 'HYDRATE_FROM_SUPABASE') {
+    return { ...state, ...(action as { type: 'HYDRATE_FROM_SUPABASE'; payload: DataTermuat }).payload };
+  }
+  if (action.type === 'SET_CURRENT_USER') {
+    return { ...state, currentUser: (action as { type: 'SET_CURRENT_USER'; payload: User | null }).payload };
+  }
+
   // Action internal untuk sinkronisasi antar-tab
   if (action.type === 'HYDRATE_FROM_STORAGE') {
     // PENTING: Pertahankan currentUser tab saat ini, jangan tertimpa dari tab lain
@@ -481,11 +525,17 @@ function appReducer(state: AppState, action: StoreAction | { type: 'HYDRATE_FROM
 // ─── Context Type ─────────────────────────────────────────
 interface StoreContextType {
   state: AppState;
-  dispatch: React.Dispatch<StoreAction>;
+  dispatch: React.Dispatch<StoreActionInternal>;
   isHydrated: boolean;
-  login: (email: string, password: string) => User | null;
-  logout: () => void;
+  /** true bila Supabase terkonfigurasi — menentukan jalur data & autentikasi */
+  isSupabase: boolean;
+  /** sesi Supabase yang sedang aktif (null pada Mode Demo) */
+  authUser: { id: string; email: string } | null;
+  login: (email: string, password: string) => Promise<User | null>;
+  logout: () => Promise<void>;
   resetToInitial: () => void;
+  /** muat ulang seluruh data dari Postgres (mode Supabase) */
+  refresh: () => Promise<void>;
   /** C-1: verifikasi sandi per-akun — dipakai apiTandatanganSurat */
   verifyPassword: (email: string, password: string) => boolean;
   getUser: (id: string) => User | undefined;
@@ -499,6 +549,14 @@ interface StoreContextType {
   generateNomorSurat: (klasifikasiKode: string) => string;
   addRiwayat: (suratMasukId: string | undefined, suratKeluarId: string | undefined, status: string, catatan: string) => void;
   addNotifikasi: (userId: string, judul: string, pesan: string, tautanUrl?: string) => void;
+  /**
+   * Tandai notifikasi sudah dibaca.
+   * - Mode Demo   : cukup ubah state lokal.
+   * - Mode Supabase: harus disimpan ke Postgres lewat RPC, kalau tidak
+   *  flag kembali menjadi belum dibaca setelah muat ulang data.
+   * `notifikasiId` kosong = tandai semua notifikasi milik pengguna aktif.
+   */
+  markNotifikasiRead: (notifikasiId?: string) => Promise<void>;
   addLog: (aksi: string, detail: string) => void;
   getScopedDisposisi: () => Disposisi[];
   getScopedSuratMasuk: () => SuratMasuk[];
@@ -511,26 +569,35 @@ const StoreContext = createContext<StoreContextType | null>(null);
 
 let idCounter = 1000;
 
+// Pembantu `useSyncExternalStore` untuk mendeteksi sisi klien.
+const subscribeHidrasi = () => () => {};
+const getSnapshotHidrasi = () => true;
+const getServerSnapshotHidrasi = () => false;
+
 // ─── StoreProvider ────────────────────────────────────────
 export function StoreProvider({ children }: { children: ReactNode }) {
   // Lazy initializer: loadState() hanya dipanggil sekali saat mount
   const [state, dispatch] = useReducer(appReducer, undefined, loadState);
 
-  // Flag hydration — true setelah render pertama client-side selesai
-  const [isHydrated, setIsHydrated] = useState(false);
-  useEffect(() => {
-    setIsHydrated(true);
-  }, []);
+  // Flag hydration — false saat render di server, true di browser. Dipakai
+  // `useSyncExternalStore` supaya tidak perlu `setState` di dalam efek.
+  const isHydrated = useSyncExternalStore(
+    subscribeHidrasi,
+    getSnapshotHidrasi,
+    getServerSnapshotHidrasi
+  );
 
   // ── Persist state ke localStorage setiap kali state berubah ──
+  //    Hanya Mode Demo. Pada mode Supabase, Postgres adalah sumber kebenaran.
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (supabaseAktif()) return;
     try {
       // Exclude currentUser dari data yang dibagikan via localStorage
       const { currentUser, ...stateToSave } = state;
       const toSave = { _v: STORAGE_VERSION, ...stateToSave };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
-      
+
       // Simpan session per-tab ke sessionStorage
       if (currentUser) {
         sessionStorage.setItem('surat-dinas-session', currentUser.id);
@@ -544,8 +611,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // ── Sinkronisasi antar-tab: dengarkan perubahan dari tab lain ──
   // (event 'storage' TIDAK fired di tab yang menulis sendiri — aman dari infinite loop)
+  //    Hanya Mode Demo — mode Supabase memakai Realtime Postgres.
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (supabaseAktif()) return;
     const handler = (e: StorageEvent) => {
       if (e.key !== STORAGE_KEY || !e.newValue) return;
       try {
@@ -562,14 +631,92 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Sinkronisasi cookie dengan currentUser (re-set setiap login/logout/hydration) ──
+  //    Hanya Mode Demo. Pada mode Supabase, cookie `userRole` justru bisa dipalsukan
+  //    sehingga tidak boleh dipakai sebagai penjaga akses — RLS Postgres yang menjaga.
   useEffect(() => {
     if (typeof document === 'undefined') return;
+    if (supabaseAktif()) {
+      document.cookie = 'userRole=; path=/; max-age=0; SameSite=Lax';
+      return;
+    }
     if (state.currentUser) {
       document.cookie = `userRole=${state.currentUser.role}; path=/; max-age=86400; SameSite=Lax`;
     } else {
       document.cookie = 'userRole=; path=/; max-age=0; SameSite=Lax';
     }
   }, [state.currentUser]);
+
+  // ─── Sesi Supabase ─────────────────────────────────────
+  const isSupabase = supabaseAktif();
+  const [authUser, setAuthUserState] = useState<{ id: string; email: string } | null>(null);
+  const authRef = useRef<{ id: string; email: string } | null>(null);
+
+  const setAuthUser = useCallback((v: { id: string; email: string } | null) => {
+    authRef.current = v;
+    setAuthUserState(v);
+  }, []);
+
+  /** Muat ulang seluruh data dari Postgres dan perbarui pengguna saat ini. */
+  const refresh = useCallback(async () => {
+    if (!supabaseAktif()) return;
+    const data = await muatSemuaData();
+    dispatch({ type: 'HYDRATE_FROM_SUPABASE', payload: data });
+    const id = authRef.current?.id;
+    if (id) {
+      dispatch({
+        type: 'SET_CURRENT_USER',
+        payload: data.users.find((u) => u.authId === id) ?? null,
+      });
+    }
+  }, []);
+
+  // ── Pulihkan sesi Supabase saat aplikasi dimuat ──
+  useEffect(() => {
+    if (!isSupabase) {
+      return;
+    }
+    let batal = false;
+    (async () => {
+      try {
+        const client = sb();
+        const { data } = await client.auth.getSession();
+        const sesi = data.session;
+        if (!sesi) {
+          return;
+        }
+        if (!batal) {
+          setAuthUser({ id: sesi.user.id, email: sesi.user.email ?? '' });
+        }
+        const termuat = await muatSemuaData();
+        if (batal) return;
+        dispatch({ type: 'HYDRATE_FROM_SUPABASE', payload: termuat });
+        dispatch({
+          type: 'SET_CURRENT_USER',
+          payload: termuat.users.find((u) => u.authId === sesi.user.id) ?? null,
+        });
+      } catch (galat) {
+        console.error('[store] gagal memulihkan sesi Supabase:', galat);
+      }
+    })();
+    return () => {
+      batal = true;
+    };
+  }, [isSupabase, setAuthUser]);
+
+  // ── Ikuti perubahan status autentikasi (mis. sign-out di tab lain) ──
+  useEffect(() => {
+    if (!isSupabase) return;
+    const client = sb();
+    const { data } = client.auth.onAuthStateChange((_event, sesi) => {
+      if (!sesi) {
+        setAuthUser(null);
+        dispatch({ type: 'SET_CURRENT_USER', payload: null });
+        return;
+      }
+      setAuthUser({ id: sesi.user.id, email: sesi.user.email ?? '' });
+    });
+    return () => data.subscription.unsubscribe();
+  }, [isSupabase, setAuthUser]);
 
   // ─── Auth helpers ─────────────────────────────────────
 
@@ -584,17 +731,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return user ? user.dummyPassword === cleanPass : false;
   }, [state.users]);
 
-  const login = useCallback((email: string, password: string): User | null => {
+  const login = useCallback(async (email: string, password: string): Promise<User | null> => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPass = password.trim();
 
+    if (supabaseAktif()) {
+      const { data, error } = await sb().auth.signInWithPassword({
+        email: cleanEmail,
+        password: cleanPass,
+      });
+      if (error) {
+        if (/invalid login credentials/i.test(error.message)) return null;
+        throw new GalatData(
+          'Gagal terhubung ke server. Periksa koneksi internet Anda dan coba lagi.'
+        );
+      }
+      const authId = data.user.id;
+      const termuat = await muatSemuaData();
+      dispatch({ type: 'HYDRATE_FROM_SUPABASE', payload: termuat });
+      const user = termuat.users.find((u) => u.authId === authId) ?? null;
+      if (!user) {
+        await sb().auth.signOut();
+        throw new GalatData('Akun Anda belum terdaftar pada aplikasi. Hubungi Administrator.');
+      }
+      if (!user.aktif) {
+        await sb().auth.signOut();
+        throw new GalatData('Akun Anda telah dinonaktifkan. Hubungi Administrator.');
+      }
+      setAuthUser({ id: authId, email: cleanEmail });
+      dispatch({ type: 'SET_CURRENT_USER', payload: user });
+      return user;
+    }
+
     const user = state.users.find((u) => u.email.toLowerCase() === cleanEmail);
     if (!user) return null;
-    
+
     if (!user.aktif) {
       throw new Error("Akun Anda telah dinonaktifkan. Hubungi Administrator.");
     }
-    
+
     if (user.dummyPassword === cleanPass) {
       // Tulis cookie sekarang juga: middleware membacanya pada navigasi berikutnya,
       // sebelum useEffect sinkronisasi cookie sempat berjalan.
@@ -605,12 +780,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
 
     return null;
-  }, [state.users]);
+  }, [state.users, setAuthUser]);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    if (supabaseAktif()) {
+      try {
+        await sb().auth.signOut();
+      } catch {
+        // abaikan — sesi lokal tetap dibersihkan
+      }
+      setAuthUser(null);
+    }
     // Cookie di-clear oleh useEffect [state.currentUser] — tidak perlu duplikasi
     dispatch({ type: 'LOGOUT' });
-  }, []);
+  }, [setAuthUser]);
 
   // ── Reset seluruh data ke initialState ──
   const resetToInitial = useCallback(() => {
@@ -734,6 +917,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
     }
   }, [state.users]);
+
+  /**
+   * Tandai notifikasi sudah dibaca.
+   * - Mode Supabase: flag disimpan ke Postgres lewat RPC; tanpa itu status
+   *   kembali menjadi "belum dibaca" setiap kali data dimuat ulang.
+   * - Mode Demo: cukup ubah state lokal.
+   * `notifikasiId` kosong = tandai semua notifikasi milik pengguna aktif.
+   */
+  const markNotifikasiRead = useCallback(
+    async (notifikasiId?: string) => {
+      if (isSupabase) {
+        await rpc('rpc_tandai_notifikasi_dibaca', { p_notifikasi_id: notifikasiId ?? null });
+        await refresh();
+        return;
+      }
+      if (notifikasiId) {
+        dispatch({ type: 'MARK_NOTIFIKASI_READ', payload: notifikasiId });
+        return;
+      }
+      state.notifikasi
+        .filter((n) => n.userId === state.currentUser?.id && !n.dibaca)
+        .forEach((n) => dispatch({ type: 'MARK_NOTIFIKASI_READ', payload: n.id }));
+    },
+    [isSupabase, refresh, state.notifikasi, state.currentUser]
+  );
 
   const addLog = useCallback((aksi: string, detail: string) => {
     if (!state.currentUser) return;
@@ -891,9 +1099,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         state,
         dispatch,
         isHydrated,
+        isSupabase,
+        authUser,
         login,
         logout,
         resetToInitial,
+        refresh,
         verifyPassword,
         getUser,
         getUnitKerja,
@@ -902,6 +1113,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         getDataMaster,
         getMasterLabel,
         getUnreadCount,
+        markNotifikasiRead,
         generateId,
         generateNomorSurat,
         addRiwayat,
